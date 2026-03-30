@@ -8,7 +8,6 @@ Run:
 from __future__ import annotations
 
 import json
-import math
 import os
 import re as _re
 import subprocess
@@ -289,44 +288,6 @@ def load_electricity_master() -> list[dict]:
                 "other": row[18].value or 0,      # col S
                 "night": row[19].value,           # col T
             })
-        wb.close()
-        return records
-    except Exception:
-        return []
-
-
-@st.cache_data(ttl=3600)
-def load_co2_factors() -> list[dict]:
-    """Load CO2 emission factors from Excel CO2計算 sheet.
-
-    Returns list of dicts with keys: name, real, adj.
-    - name: 電気事業者名
-    - real: 実排出係数 [tCO2/kWh] (col E)
-    - adj:  調整後排出係数 [tCO2/kWh] (col J)
-    """
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(EXCEL_PATH, data_only=True, read_only=True)
-        co2_sheet = None
-        for sn in wb.sheetnames:
-            if "CO2" in sn and len(sn) < 10:
-                co2_sheet = sn
-                break
-        if not co2_sheet:
-            wb.close()
-            return []
-        ws = wb[co2_sheet]
-        records = []
-        for row in ws.iter_rows(min_row=7, max_col=13, values_only=False):
-            name = row[0].value  # col A
-            real_factor = row[4].value  # col E
-            adj_factor = row[9].value   # col J
-            if name and isinstance(real_factor, (int, float)):
-                records.append({
-                    "name": str(name).strip(),
-                    "real": real_factor,
-                    "adj": adj_factor if isinstance(adj_factor, (int, float)) else real_factor,
-                })
         wb.close()
         return records
     except Exception:
@@ -931,16 +892,12 @@ with tab2:
 
     # ----- Contract Terms -----
     with st.expander("📋 契約条件", expanded=True):
-        _auto_demand_cut = st.session_state.get("ipals_data", {}).get("demand_cut_kw", 0.0) or 0.0
         if is_epc:
             ct_col1, ct_col2 = st.columns(2)
             with ct_col1:
                 contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
             with ct_col2:
-                demand_reduction = st.number_input(
-                    "削減デマンド (kW)", min_value=0.0, step=1.0, value=_auto_demand_cut,
-                    help="iPals CSVアップロード時は自動算出されます",
-                )
+                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
             ppa_unit_price = 0.0
             surplus_price = 0.0
         else:
@@ -957,16 +914,11 @@ with tab2:
             with ct_col3:
                 surplus_price = st.number_input("余剰売電単価 (円/kWh)", min_value=0.0, step=0.5)
             with ct_col4:
-                demand_reduction = st.number_input(
-                    "削減デマンド (kW)", min_value=0.0, step=1.0, value=_auto_demand_cut,
-                    help="iPals CSVアップロード時は自動算出されます",
-                )
+                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
 
         # ----- Current Electricity Cost (contract master based) -----
         st.markdown("**現在の電気料金**")
         _elec_master = load_electricity_master()
-        _co2_factors = load_co2_factors()
-        _co2_factor_val = 0.000453  # default: national average
         if _elec_master:
             _companies = sorted(set(r["company"] for r in _elec_master))
             _companies_with_manual = _companies + ["その他（新電力・手入力）"]
@@ -980,41 +932,26 @@ with tab2:
                 if _elec_contract:
                     _sel = next((r for r in _contracts if r["contract"] == _elec_contract), None)
                     if _sel:
-                        # Editable fee inputs with master defaults
-                        _master_basic = float(_sel["basic"])
-                        _master_summer = float(_sel["summer"] or _sel["other"] or 0)
-                        _master_other = float(_sel["other"] or _sel["summer"] or 0)
+                        _ec1, _ec2, _ec3 = st.columns(3)
+                        with _ec1:
+                            st.metric("基本料金", f"¥{_sel['basic']:,.1f}/kW")
+                        with _ec2:
+                            _avg_rate = _sel["summer"] or _sel["other"] or 0
+                            st.metric("夏季単価", f"¥{_sel['summer'] or 0:.2f}/kWh")
+                        with _ec3:
+                            st.metric("その他季単価", f"¥{_sel['other'] or 0:.2f}/kWh")
 
-                        _fc1, _fc2, _fc3 = st.columns(3)
-                        with _fc1:
-                            _basic_rate = st.number_input(
-                                "基本料金単価 (円/kW)", min_value=0.0, step=10.0,
-                                value=_master_basic, key="elec_basic_rate",
-                                help=f"マスタ値: ¥{_master_basic:,.1f}/kW")
-                        with _fc2:
-                            _summer_rate = st.number_input(
-                                "夏季従量単価 (円/kWh)", min_value=0.0, step=0.5,
-                                value=_master_summer, key="elec_summer_rate",
-                                help=f"マスタ値: ¥{_master_summer:.2f}/kWh")
-                        with _fc3:
-                            _other_rate = st.number_input(
-                                "その他季従量単価 (円/kWh)", min_value=0.0, step=0.5,
-                                value=_master_other, key="elec_other_rate",
-                                help=f"マスタ値: ¥{_master_other:.2f}/kWh")
-
-                        st.session_state["_basic_rate_kw"] = _basic_rate
-
-                        _ep1, _ep2, _ep3 = st.columns([2, 2, 1])
+                        _ep1, _ep2 = st.columns(2)
                         with _ep1:
                             _contract_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="contract_kw")
                         with _ep2:
                             _annual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="annual_kwh")
-                        with _ep3:
-                            st.number_input("力率 (%)", min_value=50, max_value=100, value=85, step=5, key="power_factor_pct",
-                                            help="一般的な高圧受電は85%です")
 
                         # Calculate annual cost
-                        _basic_annual = _basic_rate * _contract_kw * 12
+                        _basic_annual = float(_sel["basic"]) * _contract_kw * 12
+                        # Weighted average: summer 4 months, other 8 months
+                        _summer_rate = float(_sel["summer"] or _sel["other"] or 0)
+                        _other_rate = float(_sel["other"] or _sel["summer"] or 0)
                         _avg_unit = (_summer_rate * 4 + _other_rate * 8) / 12
                         _usage_annual = _avg_unit * _annual_kwh
                         annual_elec_cost = int(_basic_annual + _usage_annual)
@@ -1023,12 +960,6 @@ with tab2:
                             f"（基本: ¥{_basic_annual:,.0f} + 従量: ¥{_usage_annual:,.0f}　"
                             f"加重平均単価: ¥{_avg_unit:.2f}/kWh）"
                         )
-
-                        # CO2 emission factor: auto-match from CO2計算 sheet
-                        _co2_match = next((f for f in _co2_factors if f["name"] == _elec_company), None)
-                        if _co2_match:
-                            _co2_factor_val = _co2_match["adj"]
-                            st.caption(f"CO₂排出係数（調整後）: **{_co2_factor_val:.6f}** tCO₂/kWh — {_elec_company}")
                     else:
                         annual_elec_cost = 0
                 else:
@@ -1036,43 +967,17 @@ with tab2:
             elif _elec_company == "その他（新電力・手入力）":
                 _mc1, _mc2, _mc3 = st.columns(3)
                 with _mc1:
-                    _manual_basic = st.number_input("基本料金単価 (円/kW)", min_value=0.0, step=100.0, key="manual_basic")
+                    _manual_basic = st.number_input("基本料金 (円/kW)", min_value=0.0, step=100.0, key="manual_basic")
                 with _mc2:
                     _manual_rate = st.number_input("従量単価 (円/kWh)", min_value=0.0, step=0.5, key="manual_rate")
                 with _mc3:
                     _manual_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="manual_contract_kw")
-
-                _mr1, _mr2 = st.columns(2)
-                with _mr1:
-                    _manual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="manual_annual_kwh")
-                with _mr2:
-                    st.number_input("力率 (%)", min_value=50, max_value=100, value=85, step=5, key="power_factor_pct",
-                                    help="一般的な高圧受電は85%です")
-
-                st.session_state["_basic_rate_kw"] = _manual_basic
-
+                _manual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="manual_annual_kwh")
                 _basic_annual = _manual_basic * _manual_kw * 12
                 _usage_annual = _manual_rate * _manual_kwh
                 annual_elec_cost = int(_basic_annual + _usage_annual)
                 if annual_elec_cost > 0:
-                    st.caption(
-                        f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**　"
-                        f"（基本: ¥{_basic_annual:,.0f} + 従量: ¥{_usage_annual:,.0f}）"
-                    )
-
-                # CO2 emission factor: select from CO2計算 sheet
-                if _co2_factors:
-                    _co2_names = [""] + [f["name"] for f in _co2_factors]
-                    _co2_selected = st.selectbox(
-                        "CO₂排出係数 — 電気事業者", _co2_names,
-                        key="co2_company",
-                        help="CO2計算シートから事業者を選択（調整後排出係数を使用）",
-                    )
-                    if _co2_selected:
-                        _co2_match = next((f for f in _co2_factors if f["name"] == _co2_selected), None)
-                        if _co2_match:
-                            _co2_factor_val = _co2_match["adj"]
-                            st.caption(f"調整後排出係数: **{_co2_factor_val:.6f}** tCO₂/kWh")
+                    st.caption(f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**")
             else:
                 annual_elec_cost = 0
         else:
@@ -1081,9 +986,6 @@ with tab2:
                 "現在の年間電気代 (円)", min_value=0, step=100000, value=0,
                 help="PP7・PP8の電気代削減額試算に使用します",
             )
-
-        # Store CO2 emission factor in session state
-        st.session_state["_co2_emission_factor"] = _co2_factor_val
 
     # ----- Pricing -----
     with st.expander("💰 価格情報", expanded=False):
@@ -1258,42 +1160,32 @@ with tab2:
                 subsidy_amount = 0
                 st.info("パネル・PCS情報を入力すると自動試算します")
 
-    # ----- Lease / Loan (PPA only) -----
+    # ----- Lease (PPA only) -----
     if not is_epc:
         with st.expander("📋 リース情報", expanded=False):
-            _finance_companies = ["シーエナジー", "みずほリース", "群馬銀行"]
-            lease_company = st.selectbox("調達先", _finance_companies, key="lease_company")
+            _lease_companies = [
+                "シーエナジー",
+                "みずほリース",
+                "NTTファイナンス",
+                "オリックス",
+                "三井住友ファイナンス&リース",
+                "その他",
+            ]
+            lease_company = st.selectbox("リース会社", _lease_companies, key="lease_company")
 
-            _is_bank_loan = (lease_company == "群馬銀行")
+            # Show fixed-rate notice for known companies
+            from proposal_generator.ppa_calc import LEASE_RATE_MAP
+            _known_rate = LEASE_RATE_MAP.get(lease_company)
+            if _known_rate is not None:
+                st.info(
+                    f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%**"
+                    + (" (CE IRR目標)" if lease_company == "シーエナジー" else " (固定)")
+                )
+                lease_rate = _known_rate * 100  # store as % for display
+            else:
+                lease_rate = st.number_input("リース金利 (%)", min_value=0.0, step=0.1, value=6.0, key="lease_rate_input")
 
-            # Default rates and terms per company
-            _finance_defaults = {
-                "シーエナジー": {"rate": 3.10, "term": 20},
-                "みずほリース": {"rate": 5.50, "term": 10},
-                "群馬銀行": {"rate": 1.80, "term": 20},
-            }
-            _defaults = _finance_defaults[lease_company]
-
-            # Labels switch based on finance type
-            _company_label = "銀行" if _is_bank_loan else "リース会社"
-            _term_label = "借入期間(年数)" if _is_bank_loan else "リース利用期間"
-            _rate_label = "調達金利(年利)" if _is_bank_loan else "リース金利(年利)"
-
-            st.info(f"**{_company_label}**: {lease_company}　／　デフォルト金利: **{_defaults['rate']:.2f}%**")
-
-            lease_rate = st.number_input(
-                _rate_label + " (%)", min_value=0.0, step=0.1,
-                value=_defaults["rate"], key="lease_rate_input",
-            )
-            lease_years = st.number_input(
-                _term_label, min_value=1, max_value=30,
-                value=_defaults["term"], key="lease_years_input",
-            )
-
-            # Bank loan additional cost info
-            if _is_bank_loan and selling_price > 0:
-                _fire_insurance = math.ceil(selling_price / 1_000_000 * 3107 / 1000) * 1000
-                st.caption(f"火災保険料: ¥{_fire_insurance:,.0f}/年　償却資産税率: 1.4%")
+            lease_years = st.number_input("リース期間 (年)", min_value=1, max_value=30, value=20, key="lease_years_input")
     else:
         lease_company = ""
         lease_rate = 0.0
@@ -1328,15 +1220,12 @@ with tab2:
             _total_surplus = 0.0
             _total_self_consume = 0.0
             _monthly_gen = [0.0] * 12
-            _hourly_rows = []  # raw hourly data for demand calc / charts
             _row_count = 0
             for _row in _reader:
                 if len(_row) < 8:
                     continue
                 try:
                     _month = int(_row[0])
-                    _day = int(_row[1])
-                    _hour = int(_row[2])
                     _gen = float(_row[3]) if _row[3] and _row[3] != "-" else 0.0
                     _demand = float(_row[4]) if _row[4] and _row[4] != "-" else 0.0
                     _surplus = float(_row[6]) if _row[6] and _row[6] != "-" else 0.0
@@ -1349,17 +1238,11 @@ with tab2:
                 _total_self_consume += _self_c
                 if 1 <= _month <= 12:
                     _monthly_gen[_month - 1] += _gen
-                _hourly_rows.append({
-                    "month": _month, "day": _day, "hour": _hour,
-                    "demand_kw": _demand, "gen_kw": _gen,
-                    "self_consumption_kw": _self_c, "surplus_kw": _surplus,
-                })
                 _row_count += 1
 
             if _row_count > 0:
                 _self_rate = (_total_self_consume / _total_gen * 100) if _total_gen > 0 else 0.0
-                _co2_ef = st.session_state.get("_co2_emission_factor", 0.000453)
-                _co2_t = _total_gen * _co2_ef
+                _co2_t = _total_gen * 0.000453  # t-CO2/kWh (2023 grid emission factor)
 
                 st.success(f"読み込み完了: {_row_count:,}行（{_row_count // 24}日分）")
                 _ic1, _ic2, _ic3, _ic4 = st.columns(4)
@@ -1372,19 +1255,6 @@ with tab2:
                 with _ic4:
                     st.metric("余剰電力量", f"{_total_surplus:,.0f} kWh")
 
-                # Peak demand detection
-                _peak_before = max((r["demand_kw"] for r in _hourly_rows), default=0)
-                _peak_after = max((r["demand_kw"] - r["self_consumption_kw"] for r in _hourly_rows), default=0)
-                _demand_cut = _peak_before - _peak_after
-
-                _dc1, _dc2, _dc3 = st.columns(3)
-                with _dc1:
-                    st.metric("ピークデマンド（導入前）", f"{_peak_before:,.0f} kW")
-                with _dc2:
-                    st.metric("ピークデマンド（導入後）", f"{_peak_after:,.0f} kW")
-                with _dc3:
-                    st.metric("▲デマンド削減", f"{_demand_cut:,.0f} kW")
-
                 # Store in session state for slides
                 st.session_state["ipals_data"] = {
                     "annual_gen_kwh": round(_total_gen),
@@ -1394,46 +1264,58 @@ with tab2:
                     "surplus_kwh": round(_total_surplus),
                     "co2_annual_t": round(_co2_t, 1),
                     "monthly_gen_kwh": [round(m) for m in _monthly_gen],
-                    "hourly_rows": _hourly_rows,
-                    "peak_demand_before_kw": round(_peak_before, 1),
-                    "peak_demand_after_kw": round(_peak_after, 1),
-                    "demand_cut_kw": round(_demand_cut, 1),
                 }
-
-                # 20-year projection
-                with st.expander("20年間発電量推計", expanded=False):
-                    _degradation = 0.005  # 0.5% annual degradation
-                    _proj_rows = []
-                    _total_20yr_gen = 0.0
-                    _total_20yr_co2 = 0.0
-                    for _yr in range(1, 21):
-                        _decay = (1 - _degradation) ** (_yr - 1)
-                        _yr_gen = _total_gen * _decay
-                        _yr_co2 = _co2_t * _decay
-                        _total_20yr_gen += _yr_gen
-                        _total_20yr_co2 += _yr_co2
-                        _proj_rows.append({
-                            "年": _yr,
-                            "発電量 (kWh)": f"{_yr_gen:,.0f}",
-                            "自家消費 (kWh)": f"{_total_self_consume * _decay:,.0f}",
-                            "余剰 (kWh)": f"{_total_surplus * _decay:,.0f}",
-                            "CO2削減 (t)": f"{_yr_co2:.1f}",
-                            "劣化率": f"{(1 - _decay) * 100:.1f}%",
-                        })
-                    import pandas as _pd
-                    st.dataframe(_pd.DataFrame(_proj_rows), use_container_width=True, hide_index=True)
-
-                    _tc1, _tc2 = st.columns(2)
-                    with _tc1:
-                        st.metric("20年間累計発電量", f"{_total_20yr_gen:,.0f} kWh")
-                    with _tc2:
-                        st.metric("20年間累計CO2削減", f"{_total_20yr_co2:,.1f} t-CO2")
-
-                    # Store 20-year totals
-                    st.session_state["ipals_data"]["total_20yr_gen_kwh"] = round(_total_20yr_gen)
-                    st.session_state["ipals_data"]["total_20yr_co2_t"] = round(_total_20yr_co2, 1)
             else:
                 st.error("CSVのパースに失敗しました。iPals出力形式を確認してください。")
+
+    # ----- Layout image & Load calculation upload -----
+    with st.expander("📐 設備レイアウト・積載荷重", expanded=False):
+        st.caption("PP5 / EP3 スライドに使用します")
+
+        _layout_col1, _layout_col2 = st.columns(2)
+
+        with _layout_col1:
+            st.markdown("**レイアウト画像**")
+            _layout_img = st.file_uploader(
+                "屋根レイアウト画像をアップロード",
+                type=["png", "jpg", "jpeg", "bmp", "gif"],
+                key="layout_image_file",
+                help="屋根配置図のスクリーンショットや画像ファイル",
+            )
+            if _layout_img is not None:
+                st.image(_layout_img, caption="レイアウト画像プレビュー", use_container_width=True)
+                # Save to temp file for PPTX generation
+                import tempfile as _tmp_layout
+                _ext = Path(_layout_img.name).suffix or ".png"
+                _tmp_path = Path(_tmp_layout.mktemp(suffix=_ext))
+                _tmp_path.write_bytes(_layout_img.getvalue())
+                st.session_state["layout_image_path"] = str(_tmp_path)
+            else:
+                st.session_state.pop("layout_image_path", None)
+
+        with _layout_col2:
+            st.markdown("**積載荷重計算表**")
+            _load_calc_file = st.file_uploader(
+                "積載荷重計算表Excelをアップロード",
+                type=["xlsx", "xlsm", "xls"],
+                key="load_calc_file",
+                help="積載荷重計算表Excel（まとめシートから読み込みます）",
+            )
+            if _load_calc_file is not None:
+                try:
+                    from proposal_generator.load_calc import parse_load_calc_excel
+                    _lc = parse_load_calc_excel(_load_calc_file)
+                    st.session_state["load_calc_data"] = _lc
+                    st.success(
+                        f"読み込み完了: 総重量 {_lc.get('total_weight_kg', 0):,.0f}kg / "
+                        f"積載荷重 {_lc.get('load_per_roof_area', 0):.2f}kg/m²"
+                    )
+                    with st.expander("読み込み内容を確認", expanded=False):
+                        st.json(_lc)
+                except Exception as e:
+                    st.error(f"読み込みエラー: {e}")
+            else:
+                st.session_state.pop("load_calc_data", None)
 
     # ----- PPA Unit Price Auto-Calculation (PPA only) -----
     if not is_epc:
@@ -1517,11 +1399,9 @@ with tab2:
                 for _w in _warns:
                     st.warning(_w)
 
-                _is_loan_result = _calc_res.get("finance_type") == "loan"
                 _r1, _r2, _r3, _r4, _r5 = st.columns(5)
                 with _r1:
-                    _pay_label = "年間元金返済額" if _is_loan_result else "リース年額"
-                    st.metric(_pay_label, f"¥{_calc_res['annual_lease_payment']:,.0f}")
+                    st.metric("リース年額", f"¥{_calc_res['annual_lease_payment']:,.0f}")
                 with _r2:
                     st.metric("O&M年額", f"¥{_calc_res.get('annual_om_cost', 0):,.0f}")
                 with _r3:
@@ -1531,33 +1411,6 @@ with tab2:
                 with _r5:
                     _md = _calc_res.get("min_dscr")
                     st.metric("最小DSCR（最終年）", f"{_md:.3f}" if _md else "—")
-
-                # IRR / NPV / Re-lease
-                _irr_val = _calc_res.get("irr_pct")
-                _npv_val = _calc_res.get("npv_yen")
-                _release = _calc_res.get("re_lease_annual", 0)
-                _fin_cols = st.columns(3)
-                with _fin_cols[0]:
-                    st.metric("IRR", f"{_irr_val:.2f}%" if _irr_val is not None else "—")
-                with _fin_cols[1]:
-                    st.metric("NPV", f"¥{_npv_val:,.0f}" if _npv_val is not None else "—")
-                with _fin_cols[2]:
-                    if _release > 0:
-                        st.metric("再リース年額", f"¥{_release:,.0f}")
-                    else:
-                        st.metric("再リース", "—")
-
-                # Bank loan additional cost breakdown
-                if _is_loan_result:
-                    _lr1, _lr2, _lr3, _lr4 = st.columns(4)
-                    with _lr1:
-                        st.metric("年間元金返済額", f"¥{_calc_res.get('annual_principal', 0):,.0f}")
-                    with _lr2:
-                        st.metric("初年度利息", f"¥{_calc_res.get('annual_interest_y1', 0):,.0f}")
-                    with _lr3:
-                        st.metric("火災保険料(年額)", f"¥{_calc_res.get('fire_insurance_annual', 0):,.0f}")
-                    with _lr4:
-                        st.metric("償却資産税(初年度)", f"¥{_calc_res.get('depreciation_tax_y1', 0):,.0f}")
 
                 # Apply button
                 if st.button(
@@ -1593,6 +1446,56 @@ with tab2:
                         height=300,
                     )
 
+    # ----- FIP (Feed-in Premium) -----
+    with st.expander("⚡ FIP売電試算（余剰電力のFIP売電）", expanded=False):
+        st.caption("FIP制度を活用して余剰電力を売電する場合の試算です。NEW_fip スライドに反映されます。")
+        from proposal_generator.fip_calc import (
+            calc_fip_net_revenue,
+            DEFAULT_MARKET_PRICE,
+            DEFAULT_BALANCING_RATE,
+        )
+
+        _fip_col1, _fip_col2 = st.columns(2)
+        with _fip_col1:
+            fip_premium = st.number_input(
+                "FIPプレミアム単価 (円/kWh)",
+                min_value=0.0, max_value=50.0, value=4.0, step=0.5,
+                key="fip_premium",
+                help="FIP認定で付与されるプレミアム単価",
+            )
+            fip_market = st.number_input(
+                "想定市場価格 (円/kWh)",
+                min_value=0.0, max_value=50.0, value=DEFAULT_MARKET_PRICE, step=0.5,
+                key="fip_market_price",
+                help="JEPX市場の想定平均価格",
+            )
+            fip_balancing_rate = st.number_input(
+                "バランシングコスト (円/kWh)",
+                min_value=0.0, max_value=10.0, value=DEFAULT_BALANCING_RATE, step=0.1,
+                key="fip_balancing_rate",
+                help="発電予測と実績の差分によるペナルティコスト",
+            )
+
+        with _fip_col2:
+            _fip_surplus = st.session_state.get("ipals_data", {}).get("surplus_kwh", 0.0)
+            if _fip_surplus > 0:
+                st.metric("余剰電力量（初年度）", f"{_fip_surplus:,.0f} kWh")
+                _fip_result = calc_fip_net_revenue(
+                    surplus_kwh=_fip_surplus,
+                    premium_yen_per_kwh=fip_premium,
+                    market_price_yen_per_kwh=fip_market,
+                    balancing_rate=fip_balancing_rate,
+                )
+                st.metric("FIP売電収入（税引前）", f"¥{_fip_result['net_revenue']:,.0f}/年")
+                st.metric("実効売電単価", f"{_fip_result['effective_rate']:.1f} 円/kWh")
+                st.caption(
+                    f"内訳: 売電収入 ¥{_fip_result['gross_revenue']:,.0f} "
+                    f"- バランシング ¥{_fip_result['balancing_cost']:,.0f}"
+                )
+                st.session_state["fip_calc_result"] = _fip_result
+            else:
+                st.info("iPalsデータをアップロードすると余剰電力量が自動計算されます")
+
     # ----- FF (Fact Finding) -----
     with st.expander("📝 FF振り返り（前回ヒアリング結果）", expanded=False):
         st.caption("NEW_ff スライドに使用します")
@@ -1615,6 +1518,81 @@ with tab2:
                 "制約・懸念事項", height=80,
                 placeholder="例：屋根の耐荷重確認が必要、補助金期限2026/6",
             )
+
+    # ----- Estimate / Quotation data -----
+    with st.expander("📋 概算見積書データ（EP_ESTIMATE / PP_ESTIMATE スライド用）", expanded=False):
+        st.caption(
+            "概算見積書スライドに表示するデータを入力します。"
+            "EPC: 概算費用お見積書、PPA: 概算費用参考資料。"
+            "空欄の場合、機器・価格データから自動生成します。"
+        )
+
+        est_col1, est_col2 = st.columns(2)
+        with est_col1:
+            estimate_number = st.text_input(
+                "見積番号",
+                placeholder="例: EST-20260330-001（空欄で自動生成）",
+                key="estimate_number_input",
+            )
+            estimate_validity = st.text_input(
+                "見積有効期限",
+                value="本見積書発行日より1ヶ月間",
+                key="estimate_validity_input",
+            )
+            estimate_delivery = st.text_input(
+                "納期目安",
+                value="ご発注後、別途ご相談",
+                key="estimate_delivery_input",
+            )
+        with est_col2:
+            estimate_subsidy_note = st.text_input(
+                "補助金に関する備考",
+                value="補助金申請費用は別途お見積り",
+                key="estimate_subsidy_note_input",
+            )
+            estimate_frame_cost = st.number_input(
+                "架台・施工費 (円)",
+                min_value=0, step=100000, value=0,
+                key="estimate_frame_cost_input",
+                help="見積書に架台・施工費を個別表示する場合に入力",
+            )
+            estimate_electrical_cost = st.number_input(
+                "電気工事費 (円)",
+                min_value=0, step=100000, value=0,
+                key="estimate_electrical_cost_input",
+                help="見積書に電気工事費を個別表示する場合に入力",
+            )
+
+        st.divider()
+        st.write("**追加明細行**")
+        st.caption("上記以外の費目を追加できます（最大5行）")
+        _extra_items = []
+        for _ei in range(3):
+            _ec1, _ec2, _ec3 = st.columns([3, 1, 1])
+            with _ec1:
+                _ename = st.text_input(
+                    "項目名", key=f"est_extra_name_{_ei}",
+                    placeholder="例: 遠隔監視システム",
+                )
+            with _ec2:
+                _eqty = st.text_input(
+                    "数量", key=f"est_extra_qty_{_ei}",
+                    placeholder="1式",
+                )
+            with _ec3:
+                _eamt = st.number_input(
+                    "金額（円）", min_value=0, step=10000, value=0,
+                    key=f"est_extra_amt_{_ei}",
+                )
+            if _ename and _eamt > 0:
+                _extra_items.append({
+                    "name": _ename,
+                    "spec": "",
+                    "qty": _eqty if _eqty else 1,
+                    "unit": "",
+                    "unit_price": _eamt,
+                    "amount": _eamt,
+                })
 
     # ----- Store all data in session state -----
     st.session_state["customer_data"] = {
@@ -1669,11 +1647,6 @@ with tab2:
         "elec_contract": st.session_state.get("elec_contract", ""),
         "contract_kw": st.session_state.get("contract_kw", 0),
         "annual_kwh": st.session_state.get("annual_kwh", 0),
-        # Demand cut data
-        "basic_rate_kw": st.session_state.get("_basic_rate_kw", 0),
-        "power_factor_pct": st.session_state.get("power_factor_pct", 85),
-        # CO2 emission factor
-        "co2_emission_factor": st.session_state.get("_co2_emission_factor", 0.000453),
         # PPA calc results (if auto-calculated)
         "annual_lease_payment": st.session_state.get("ppa_calc_result", {}).get("annual_lease_payment", 0),
         "ppa_effective_rate_pct": st.session_state.get("ppa_calc_result", {}).get("effective_rate_pct", 0.0),
@@ -1683,14 +1656,27 @@ with tab2:
         "min_dscr": st.session_state.get("ppa_calc_result", {}).get("min_dscr", None),
         "cashflow_table": st.session_state.get("ppa_calc_result", {}).get("cashflow_table", []),
         "ppa_principal": st.session_state.get("ppa_calc_result", {}).get("principal", 0),
-        "irr_pct": st.session_state.get("ppa_calc_result", {}).get("irr_pct"),
-        "npv_yen": st.session_state.get("ppa_calc_result", {}).get("npv_yen"),
-        "re_lease_annual": st.session_state.get("ppa_calc_result", {}).get("re_lease_annual", 0),
         # FF
         "ff_current_situation": ff_current,
         "ff_customer_needs": ff_needs,
         "ff_mgmt_needs": ff_mgmt,
         "ff_constraints": ff_constraints,
+        # FIP data
+        "fip_premium_yen_per_kwh": st.session_state.get("fip_premium", 0),
+        "fip_market_price": st.session_state.get("fip_market_price", DEFAULT_MARKET_PRICE),
+        "fip_balancing_rate": st.session_state.get("fip_balancing_rate", DEFAULT_BALANCING_RATE),
+        "fip_gross_revenue": st.session_state.get("fip_calc_result", {}).get("gross_revenue", 0),
+        "fip_balancing_cost": st.session_state.get("fip_calc_result", {}).get("balancing_cost", 0),
+        "fip_net_revenue": st.session_state.get("fip_calc_result", {}).get("net_revenue", 0),
+        "fip_effective_rate": st.session_state.get("fip_calc_result", {}).get("effective_rate", 0),
+        # Estimate / quotation data
+        "estimate_number": estimate_number,
+        "estimate_validity": estimate_validity,
+        "estimate_delivery": estimate_delivery,
+        "estimate_subsidy_note": estimate_subsidy_note,
+        "estimate_frame_cost": estimate_frame_cost,
+        "estimate_electrical_cost": estimate_electrical_cost,
+        "estimate_extra_items": _extra_items,
     }
     # Merge iPals data if available
     _ipals = st.session_state.get("ipals_data")
@@ -1702,11 +1688,15 @@ with tab2:
             "surplus_kwh": _ipals.get("surplus_kwh"),
             "co2_annual_t": _ipals.get("co2_annual_t"),
             "monthly_gen_kwh": _ipals.get("monthly_gen_kwh"),
-            "hourly_rows": _ipals.get("hourly_rows"),
-            "peak_demand_before_kw": _ipals.get("peak_demand_before_kw"),
-            "peak_demand_after_kw": _ipals.get("peak_demand_after_kw"),
-            "demand_cut_kw": _ipals.get("demand_cut_kw"),
         })
+
+    # Merge layout image path and load calc data if available
+    _layout_path = st.session_state.get("layout_image_path")
+    if _layout_path:
+        st.session_state["customer_data"]["layout_image_path"] = _layout_path
+    _lc_data = st.session_state.get("load_calc_data")
+    if _lc_data:
+        st.session_state["customer_data"]["load_calc"] = _lc_data
 
     # Compute annual_saving for PP7/PP8/new_summary
     _cd = st.session_state["customer_data"]
@@ -1814,6 +1804,64 @@ with tab3:
         else:
             st.warning("スライドが選択されていません")
             st.session_state["selected_slides"] = []
+
+    # ------------------------------------------------------------------
+    # Advanced: Custom slide composition (for irregular cases like FIP)
+    # ------------------------------------------------------------------
+    with st.expander("📋 スライド構成カスタマイズ（上級者向け）", expanded=False):
+        st.caption(
+            "プロファイルに含まれていないスライドを追加できます。"
+            "日本梱包輸送のような自家消費＋FIP併用など、イレギュラーな構成に対応。"
+        )
+
+        # Build list of all slides NOT already in the current selection
+        _current_selected = set(st.session_state.get("selected_slides", []))
+
+        # Group available slides by category for easier browsing
+        _categories: dict[str, list[str]] = {}
+        for sid, info in catalog.items():
+            cat = info.get("category", "その他")
+            if sid not in _current_selected:
+                _categories.setdefault(cat, []).append(sid)
+
+        if _categories:
+            _add_col1, _add_col2 = st.columns([1, 1])
+            with _add_col1:
+                # Flatten all available slides for selectbox
+                _avail_slides = []
+                for cat in sorted(_categories.keys()):
+                    for sid in _categories[cat]:
+                        info = catalog.get(sid, {})
+                        _stype = info.get("type", "")
+                        _avail_slides.append(f"{sid}  ─  {info.get('title', sid)}  [{_stype}]")
+
+                _selected_add = st.multiselect(
+                    "追加するスライドを選択",
+                    _avail_slides,
+                    key="custom_slide_add",
+                    help="PPA/EPC/共通スライドを自由に追加できます",
+                )
+
+            with _add_col2:
+                if _selected_add:
+                    st.write("**追加予定:**")
+                    for item in _selected_add:
+                        st.write(f"  + {item}")
+
+            if _selected_add and st.button("選択したスライドを追加", key="apply_custom_add"):
+                _new_ids = [item.split("  ─  ")[0].strip() for item in _selected_add]
+                _existing = st.session_state.get("selected_slides", [])
+                st.session_state["selected_slides"] = _existing + _new_ids
+                st.rerun()
+
+        else:
+            st.info("全スライドが既に選択されています")
+
+        st.divider()
+        st.caption(
+            "ヒント: プロファイル選択で「自家消費＋FIP併用」を選ぶと、"
+            "FIPスライドが含まれた構成が自動設定されます。"
+        )
 
 # =========================================================================
 # Tab 4: Generate

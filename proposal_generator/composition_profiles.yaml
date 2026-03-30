@@ -6,29 +6,9 @@
 # optional: 含めるかどうかをユーザーが選択できるスライド
 
 profiles:
-  初回提案（シンプル）:
-    description: "初回訪問用の最小構成（8ページ）。課題提起→ソリューション→差別化→料金のコンパクトな流れ。"
-    proposal_type: ppa
-    notes: "営業フロー: アイスブレイク→課題提起→ソリューション→差別化→料金→クロージング。詳細データは2回目以降に。"
-    slides:
-      - PP0         # 表紙
-      - PP1         # なぜ今PPA
-      - PP2         # PPAモデルとは
-      - PP3         # 導入メリット
-      - PP4A        # なぜオルテナジー
-      - PP5         # 設備レイアウト
-      - PP7         # ご利用料金
-      - PP11        # 導入までの流れ
-    optional:
-      - NEW_ff      # FF（ヒアリングあれば）
-      - PP6         # 発電シミュレーション
-      - NEW_urgency # 緊急性
-      - NEW_env     # 環境訴求
-
   標準PPA:
     description: "PDF実物と同じ14ページ構成。初回提案のフルセット。"
     proposal_type: ppa
-    notes: "13ステップ営業フロー対応。表紙→課題提起→ソリューション→差別化→シミュレーション導入→スキーム→具体的効果→経済効果→条件→クロージング"
     slides:
       - PP0         # 表紙
       - PP1         # なぜ今オンサイトPPAなのか
@@ -45,6 +25,7 @@ profiles:
       - PP8A        # ご契約条件サマリー
       - PP11        # 導入までの流れ
     optional:
+      - PP_ESTIMATE # PPA概算費用参考資料
       - PP10        # 補助金活用
       - PP12        # 実績・事例
       - PP13        # FAQ
@@ -53,7 +34,6 @@ profiles:
   稟議書対応:
     description: "設備担当者が稟議書に添付する構成。仕様・経済効果・補助金を重視。"
     proposal_type: ppa
-    notes: "FF→数値重視の構成。シミュレーション+経済効果+補助金+条件を重点的に。差別化よりデータ訴求。"
     slides:
       - PP0         # 表紙
       - NEW_ff      # FF振り返り
@@ -68,6 +48,7 @@ profiles:
       - PP11        # スケジュール
       - NEW_summary # まとめ
     optional:
+      - PP_ESTIMATE # PPA概算費用参考資料
       - PP4A        # なぜオルテナジー
       - PP12        # 実績・事例
       - PP13        # FAQ
@@ -75,7 +56,6 @@ profiles:
   経営者向け:
     description: "社長・CFO向け。コスト削減・ROI・環境インパクトを重視。枚数は最小限。"
     proposal_type: ppa
-    notes: "経営判断に必要な情報のみ。FF→経済効果→環境→まとめ。技術詳細は省略。"
     slides:
       - PP0         # 表紙
       - NEW_ff      # FF振り返り
@@ -86,6 +66,7 @@ profiles:
       - NEW_env     # 環境訴求
       - NEW_summary # まとめ
     optional:
+      - PP_ESTIMATE # PPA概算費用参考資料
       - PP9         # デマンドカット
       - PP10        # 補助金活用
       - NEW_urgency # 緊急性訴求
@@ -93,7 +74,6 @@ profiles:
   環境重視:
     description: "ESG担当者向け。CO₂削減・環境価値・SDGs対応を前面に出した構成。"
     proposal_type: ppa
-    notes: "環境価値を前面に。PPA説明→環境訴求→シミュレーション→まとめ。コスト面は補足的に。"
     slides:
       - PP0           # 表紙
       - PP1           # なぜ今PPA
@@ -112,7 +92,6 @@ profiles:
   比較検討中:
     description: "他社との比較検討中、またはPPA vs EPC比較が必要な場合の構成。"
     proposal_type: ppa
-    notes: "差別化重視。FF→なぜオルテナジー→PPA/EPC比較→他社比較→シミュレーション→緊急性で競合を押さえる。"
     slides:
       - PP0                 # 表紙
       - NEW_ff              # FF振り返り
@@ -130,29 +109,9 @@ profiles:
       - PP10                # 補助金活用
       - PP8A                # 契約条件サマリー
 
-  初回提案（EPC）:
-    description: "EPC初回訪問用の最小構成（8ページ）。投資メリット→仕様→経済効果のコンパクトな流れ。"
-    proposal_type: epc
-    notes: "営業フロー: アイスブレイク→課題提起→ソリューション→仕様→経済効果→クロージング。"
-    slides:
-      - EP0         # 表紙
-      - EP1         # なぜ今EPC
-      - EP2         # EPCモデルとは
-      - EP3         # システム概要
-      - EP4         # 経済効果
-      - EP6         # 補助金活用
-      - EP7         # 導入スケジュール
-      - NEW_summary # まとめ
-    optional:
-      - NEW_ff      # FF
-      - EP5         # デマンドカット
-      - NEW_urgency # 緊急性
-      - NEW_env     # 環境訴求
-
   稟議書対応（EPC）:
     description: "EPC（販売）向け。投資回収・仕様重視の稟議書対応構成。"
     proposal_type: epc
-    notes: "数値重視。システム概要+経済効果+補助金で投資判断を支援。"
     slides:
       - EP0         # 表紙（EPC）
       - NEW_ff      # FF振り返り（ヒアリング結果）
@@ -162,13 +121,13 @@ profiles:
       - EP7         # 導入スケジュール（EPC）
       - NEW_summary # まとめ
     optional:
+      - EP_ESTIMATE # 概算費用お見積書（EPC）
       - EP5         # デマンドカット試算（EPC）
       - EP8         # 実績・導入事例（EPC）
 
   経営者向け（EPC）:
     description: "EPC（販売）向け。社長・CFO向け。コスト削減・ROI・環境インパクトを重視。枚数は最小限。"
     proposal_type: epc
-    notes: "経営判断に必要な情報のみ。FF→経済効果→環境→まとめ。"
     slides:
       - EP0         # 表紙（EPC）
       - NEW_ff      # FF振り返り
@@ -177,6 +136,7 @@ profiles:
       - EP6         # 補助金活用（EPC）
       - NEW_summary # まとめ
     optional:
+      - EP_ESTIMATE # 概算費用お見積書（EPC）
       - EP5         # デマンドカット試算（EPC）
       - NEW_urgency # 緊急性訴求
       - EP8         # 実績・導入事例（EPC）
@@ -184,7 +144,6 @@ profiles:
   環境重視（EPC）:
     description: "EPC（販売）向け。ESG担当者向け。CO₂削減・環境価値・SDGs対応を前面に出した構成。"
     proposal_type: epc
-    notes: "環境価値を前面に。EPC説明→環境→経済効果→まとめ。"
     slides:
       - EP0         # 表紙（EPC）
       - EP1         # なぜ今EPCか
@@ -195,13 +154,13 @@ profiles:
       - EP6         # 補助金活用（EPC）
       - NEW_summary # まとめ
     optional:
+      - EP_ESTIMATE  # 概算費用お見積書（EPC）
       - NEW_competitor # 他社比較表
       - EP8            # 実績・導入事例（EPC）
 
   比較検討中（EPC）:
     description: "EPC（販売）向け。他社との比較検討中、またはEPC vs PPA比較が必要な場合の構成。"
     proposal_type: epc
-    notes: "差別化重視。FF→PPA/EPC比較→他社比較→シミュレーション→緊急性で競合を押さえる。"
     slides:
       - EP0                 # 表紙（EPC）
       - NEW_ff              # FF振り返り
@@ -213,10 +172,55 @@ profiles:
       - NEW_urgency         # 緊急性訴求
       - NEW_summary         # まとめ
     optional:
+      - EP_ESTIMATE            # 概算費用お見積書（EPC）
       - EP5                  # デマンドカット試算（EPC）
       - NEW_building_compare # A棟/B棟 経済効果比較
       - EP7                  # 導入スケジュール（EPC）
       - EP8                  # 実績・導入事例（EPC）
+
+  自家消費＋FIP併用:
+    description: "自家消費とFIP売電を併用するケース。余剰電力をFIPで売電して収益を最大化。"
+    proposal_type: ppa
+    slides:
+      - PP0                 # 表紙
+      - PP1                 # なぜ今オンサイトPPAか
+      - PP2                 # PPAモデルとは
+      - PP3                 # 導入メリット
+      - PP4A                # なぜオルテナジーが選ばれるのか
+      - PP5A                # 【効果シミュレーション】区切り
+      - PP6A                # 事業スキーム
+      - PP5                 # 設備レイアウト
+      - PP6                 # 供給電力量・発電シミュレーション
+      - NEW_fip             # FIP制度の活用
+      - PP7                 # ご利用料金に関して
+      - PP8                 # 経済効果試算（20年表）
+      - PP8A                # ご契約条件サマリー
+      - PP11                # 導入までの流れ
+      - NEW_summary         # まとめ
+    optional:
+      - PP9                 # デマンドカット試算
+      - PP10                # 補助金活用
+      - PP12                # 実績・事例
+      - PP13                # FAQ
+      - NEW_env             # 環境訴求
+
+  自家消費＋FIP併用（EPC）:
+    description: "EPC（販売）+ FIP併用。自家消費で電気代削減しつつ余剰をFIPで売電。"
+    proposal_type: epc
+    slides:
+      - EP0                 # 表紙（EPC）
+      - NEW_ff              # FF振り返り
+      - EP3                 # システム概要（EPC）
+      - NEW_fip             # FIP制度の活用
+      - EP4                 # 経済効果・投資回収（EPC）
+      - EP6                 # 補助金活用（EPC）
+      - EP7                 # 導入スケジュール（EPC）
+      - NEW_summary         # まとめ
+    optional:
+      - EP_ESTIMATE         # 概算費用お見積書（EPC）
+      - EP5                 # デマンドカット試算（EPC）
+      - EP8                 # 実績・導入事例（EPC）
+      - NEW_env             # 環境訴求
 
 # 全スライドカタログ（IDと説明）
 slide_catalog:
@@ -227,7 +231,7 @@ slide_catalog:
   PP3:  {title: "導入メリット",              type: ppa, category: 背景}
   PP4:  {title: "現状電気代分析",            type: ppa, category: 分析}
   PP4A: {title: "なぜオルテナジーが選ばれるのか", type: ppa, category: 背景}
-  PP5:  {title: "システム概要",              type: ppa, category: 仕様}
+  PP5:  {title: "設備レイアウト・積載荷重",   type: ppa, category: 仕様}
   PP5A: {title: "効果シミュレーション（区切り）", type: ppa, category: 区切り}
   PP6:  {title: "発電シミュレーション",       type: ppa, category: 試算}
   PP6A: {title: "事業スキーム",              type: ppa, category: 説明}
@@ -259,3 +263,8 @@ slide_catalog:
   NEW_ppa_epc_compare: {title: "PPA vs EPC 比較",      type: both, category: 比較}
   NEW_building_compare: {title: "A棟/B棟 経済効果比較", type: both, category: 比較}
   NEW_env:            {title: "環境訴求",               type: both, category: 環境}
+  NEW_fip:            {title: "FIP制度の活用",           type: both, category: 売電}
+
+  # 概算見積スライド
+  EP_ESTIMATE:        {title: "概算費用お見積書（EPC）",   type: epc, category: 見積}
+  PP_ESTIMATE:        {title: "PPA概算費用参考資料",       type: ppa, category: 見積}
