@@ -1,0 +1,261 @@
+# composition_profiles.yaml
+# ペルソナ別デフォルトスライド構成
+#
+# proposal_type: "ppa" または "epc"
+# slides: スライドIDのリスト（この順序で出力）
+# optional: 含めるかどうかをユーザーが選択できるスライド
+
+profiles:
+  初回提案（シンプル）:
+    description: "初回訪問用の最小構成（8ページ）。課題提起→ソリューション→差別化→料金のコンパクトな流れ。"
+    proposal_type: ppa
+    notes: "営業フロー: アイスブレイク→課題提起→ソリューション→差別化→料金→クロージング。詳細データは2回目以降に。"
+    slides:
+      - PP0         # 表紙
+      - PP1         # なぜ今PPA
+      - PP2         # PPAモデルとは
+      - PP3         # 導入メリット
+      - PP4A        # なぜオルテナジー
+      - PP5         # 設備レイアウト
+      - PP7         # ご利用料金
+      - PP11        # 導入までの流れ
+    optional:
+      - NEW_ff      # FF（ヒアリングあれば）
+      - PP6         # 発電シミュレーション
+      - NEW_urgency # 緊急性
+      - NEW_env     # 環境訴求
+
+  標準PPA:
+    description: "PDF実物と同じ14ページ構成。初回提案のフルセット。"
+    proposal_type: ppa
+    notes: "13ステップ営業フロー対応。表紙→課題提起→ソリューション→差別化→シミュレーション導入→スキーム→具体的効果→経済効果→条件→クロージング"
+    slides:
+      - PP0         # 表紙
+      - PP1         # なぜ今オンサイトPPAなのか
+      - PP2         # PPAモデルとは
+      - PP3         # 導入メリット
+      - PP4A        # なぜオルテナジーが選ばれるのか
+      - PP5A        # 【効果シミュレーション】区切り
+      - PP6A        # 事業スキーム
+      - PP5         # 設備レイアウト
+      - PP6         # 供給電力量・発電シミュレーション
+      - PP9         # デマンド削減効果
+      - PP7         # ご利用料金に関して
+      - PP8         # 経済効果試算（20年表）
+      - PP8A        # ご契約条件サマリー
+      - PP11        # 導入までの流れ
+    optional:
+      - PP10        # 補助金活用
+      - PP12        # 実績・事例
+      - PP13        # FAQ
+      - NEW_env     # 環境訴求
+
+  稟議書対応:
+    description: "設備担当者が稟議書に添付する構成。仕様・経済効果・補助金を重視。"
+    proposal_type: ppa
+    notes: "FF→数値重視の構成。シミュレーション+経済効果+補助金+条件を重点的に。差別化よりデータ訴求。"
+    slides:
+      - PP0         # 表紙
+      - NEW_ff      # FF振り返り
+      - PP5A        # 【効果シミュレーション】区切り
+      - PP5         # 設備レイアウト
+      - PP6         # 発電シミュレーション
+      - PP9         # デマンド削減効果
+      - PP7         # ご利用料金
+      - PP8         # 経済効果試算
+      - PP10        # 補助金活用
+      - PP8A        # 契約条件サマリー
+      - PP11        # スケジュール
+      - NEW_summary # まとめ
+    optional:
+      - PP4A        # なぜオルテナジー
+      - PP12        # 実績・事例
+      - PP13        # FAQ
+
+  経営者向け:
+    description: "社長・CFO向け。コスト削減・ROI・環境インパクトを重視。枚数は最小限。"
+    proposal_type: ppa
+    notes: "経営判断に必要な情報のみ。FF→経済効果→環境→まとめ。技術詳細は省略。"
+    slides:
+      - PP0         # 表紙
+      - NEW_ff      # FF振り返り
+      - PP5A        # 【効果シミュレーション】区切り
+      - PP6         # 発電シミュレーション
+      - PP8         # 経済効果試算
+      - PP7         # ご利用料金
+      - NEW_env     # 環境訴求
+      - NEW_summary # まとめ
+    optional:
+      - PP9         # デマンドカット
+      - PP10        # 補助金活用
+      - NEW_urgency # 緊急性訴求
+
+  環境重視:
+    description: "ESG担当者向け。CO₂削減・環境価値・SDGs対応を前面に出した構成。"
+    proposal_type: ppa
+    notes: "環境価値を前面に。PPA説明→環境訴求→シミュレーション→まとめ。コスト面は補足的に。"
+    slides:
+      - PP0           # 表紙
+      - PP1           # なぜ今PPA
+      - PP2           # PPAモデルとは
+      - PP3           # 導入メリット
+      - NEW_env       # 環境訴求
+      - PP6           # 発電シミュレーション
+      - PP8           # 経済効果試算
+      - PP7           # ご利用料金
+      - NEW_summary   # まとめ
+    optional:
+      - PP4A          # なぜオルテナジー
+      - NEW_competitor # 他社比較表
+      - PP10          # 補助金活用
+
+  比較検討中:
+    description: "他社との比較検討中、またはPPA vs EPC比較が必要な場合の構成。"
+    proposal_type: ppa
+    notes: "差別化重視。FF→なぜオルテナジー→PPA/EPC比較→他社比較→シミュレーション→緊急性で競合を押さえる。"
+    slides:
+      - PP0                 # 表紙
+      - NEW_ff              # FF振り返り
+      - PP4A                # なぜオルテナジー
+      - NEW_ppa_epc_compare # PPA vs EPC 比較
+      - NEW_competitor      # 他社比較表
+      - PP6                 # 発電シミュレーション
+      - PP8                 # 経済効果試算
+      - PP7                 # ご利用料金
+      - NEW_urgency         # 緊急性訴求
+      - NEW_summary         # まとめ
+    optional:
+      - PP9                 # デマンドカット
+      - NEW_building_compare # A棟/B棟 比較
+      - PP10                # 補助金活用
+      - PP8A                # 契約条件サマリー
+
+  初回提案（EPC）:
+    description: "EPC初回訪問用の最小構成（8ページ）。投資メリット→仕様→経済効果のコンパクトな流れ。"
+    proposal_type: epc
+    notes: "営業フロー: アイスブレイク→課題提起→ソリューション→仕様→経済効果→クロージング。"
+    slides:
+      - EP0         # 表紙
+      - EP1         # なぜ今EPC
+      - EP2         # EPCモデルとは
+      - EP3         # システム概要
+      - EP4         # 経済効果
+      - EP6         # 補助金活用
+      - EP7         # 導入スケジュール
+      - NEW_summary # まとめ
+    optional:
+      - NEW_ff      # FF
+      - EP5         # デマンドカット
+      - NEW_urgency # 緊急性
+      - NEW_env     # 環境訴求
+
+  稟議書対応（EPC）:
+    description: "EPC（販売）向け。投資回収・仕様重視の稟議書対応構成。"
+    proposal_type: epc
+    notes: "数値重視。システム概要+経済効果+補助金で投資判断を支援。"
+    slides:
+      - EP0         # 表紙（EPC）
+      - NEW_ff      # FF振り返り（ヒアリング結果）
+      - EP3         # システム概要（EPC）
+      - EP4         # 経済効果・投資回収（EPC）
+      - EP6         # 補助金活用（EPC）
+      - EP7         # 導入スケジュール（EPC）
+      - NEW_summary # まとめ
+    optional:
+      - EP5         # デマンドカット試算（EPC）
+      - EP8         # 実績・導入事例（EPC）
+
+  経営者向け（EPC）:
+    description: "EPC（販売）向け。社長・CFO向け。コスト削減・ROI・環境インパクトを重視。枚数は最小限。"
+    proposal_type: epc
+    notes: "経営判断に必要な情報のみ。FF→経済効果→環境→まとめ。"
+    slides:
+      - EP0         # 表紙（EPC）
+      - NEW_ff      # FF振り返り
+      - EP4         # 経済効果・投資回収（EPC）
+      - NEW_env     # 環境訴求（CO₂削減・SDGs）
+      - EP6         # 補助金活用（EPC）
+      - NEW_summary # まとめ
+    optional:
+      - EP5         # デマンドカット試算（EPC）
+      - NEW_urgency # 緊急性訴求
+      - EP8         # 実績・導入事例（EPC）
+
+  環境重視（EPC）:
+    description: "EPC（販売）向け。ESG担当者向け。CO₂削減・環境価値・SDGs対応を前面に出した構成。"
+    proposal_type: epc
+    notes: "環境価値を前面に。EPC説明→環境→経済効果→まとめ。"
+    slides:
+      - EP0         # 表紙（EPC）
+      - EP1         # なぜ今EPCか
+      - EP2         # EPCモデルとは
+      - NEW_env     # 環境訴求（CO₂削減・SDGs）
+      - EP3         # システム概要（EPC）
+      - EP4         # 経済効果・投資回収（EPC）
+      - EP6         # 補助金活用（EPC）
+      - NEW_summary # まとめ
+    optional:
+      - NEW_competitor # 他社比較表
+      - EP8            # 実績・導入事例（EPC）
+
+  比較検討中（EPC）:
+    description: "EPC（販売）向け。他社との比較検討中、またはEPC vs PPA比較が必要な場合の構成。"
+    proposal_type: epc
+    notes: "差別化重視。FF→PPA/EPC比較→他社比較→シミュレーション→緊急性で競合を押さえる。"
+    slides:
+      - EP0                 # 表紙（EPC）
+      - NEW_ff              # FF振り返り
+      - NEW_ppa_epc_compare # PPA vs EPC 比較
+      - NEW_competitor      # 他社比較表
+      - EP3                 # システム概要（EPC）
+      - EP4                 # 経済効果・投資回収（EPC）
+      - EP6                 # 補助金活用（EPC）
+      - NEW_urgency         # 緊急性訴求
+      - NEW_summary         # まとめ
+    optional:
+      - EP5                  # デマンドカット試算（EPC）
+      - NEW_building_compare # A棟/B棟 経済効果比較
+      - EP7                  # 導入スケジュール（EPC）
+      - EP8                  # 実績・導入事例（EPC）
+
+# 全スライドカタログ（IDと説明）
+slide_catalog:
+  # PPA 既存スライド
+  PP0:  {title: "表紙",                     type: ppa, category: 基本}
+  PP1:  {title: "なぜ今オンサイトPPAか",     type: ppa, category: 背景}
+  PP2:  {title: "PPAモデルとは",             type: ppa, category: 背景}
+  PP3:  {title: "導入メリット",              type: ppa, category: 背景}
+  PP4:  {title: "現状電気代分析",            type: ppa, category: 分析}
+  PP4A: {title: "なぜオルテナジーが選ばれるのか", type: ppa, category: 背景}
+  PP5:  {title: "システム概要",              type: ppa, category: 仕様}
+  PP5A: {title: "効果シミュレーション（区切り）", type: ppa, category: 区切り}
+  PP6:  {title: "発電シミュレーション",       type: ppa, category: 試算}
+  PP6A: {title: "事業スキーム",              type: ppa, category: 説明}
+  PP7:  {title: "ご利用料金に関して",         type: ppa, category: 料金}
+  PP8:  {title: "経済効果試算",              type: ppa, category: 試算}
+  PP8A: {title: "ご契約条件サマリー",         type: ppa, category: 契約}
+  PP9:  {title: "デマンドカット試算",         type: ppa, category: 試算}
+  PP10: {title: "補助金活用",                type: ppa, category: 補助金}
+  PP11: {title: "導入スケジュール",           type: ppa, category: 運用}
+  PP12: {title: "実績・導入事例",             type: ppa, category: 実績}
+  PP13: {title: "FAQ",                      type: ppa, category: 補足}
+
+  # EPC 既存スライド
+  EP0:  {title: "表紙（EPC）",               type: epc, category: 基本}
+  EP1:  {title: "なぜ今EPCか",               type: epc, category: 背景}
+  EP2:  {title: "EPCモデルとは",             type: epc, category: 背景}
+  EP3:  {title: "システム概要（EPC）",        type: epc, category: 仕様}
+  EP4:  {title: "経済効果・投資回収（EPC）",  type: epc, category: 試算}
+  EP5:  {title: "デマンドカット試算（EPC）",  type: epc, category: 試算}
+  EP6:  {title: "補助金活用（EPC）",          type: epc, category: 補助金}
+  EP7:  {title: "導入スケジュール（EPC）",    type: epc, category: 運用}
+  EP8:  {title: "実績・導入事例（EPC）",      type: epc, category: 実績}
+
+  # 新規スライド
+  NEW_summary:        {title: "まとめ",                type: both, category: まとめ}
+  NEW_ff:             {title: "FF振り返り",             type: both, category: ヒアリング}
+  NEW_competitor:     {title: "他社比較表",             type: both, category: 比較}
+  NEW_urgency:        {title: "緊急性訴求",             type: both, category: 訴求}
+  NEW_ppa_epc_compare: {title: "PPA vs EPC 比較",      type: both, category: 比較}
+  NEW_building_compare: {title: "A棟/B棟 経済効果比較", type: both, category: 比較}
+  NEW_env:            {title: "環境訴求",               type: both, category: 環境}

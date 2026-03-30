@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.streamlit/secrets.toml
+
+# Input data (customer-specific, do not commit)
+input/*.xlsx
+input/*.xlsm
+input/*.csv
+input/*.pdf
+!input/.gitkeep
+
+# Output files
+output/
+*.pptx
+!templates/*.pptx
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc
+*.log
