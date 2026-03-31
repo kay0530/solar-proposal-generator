@@ -37,15 +37,52 @@ def _is_configured() -> bool:
     """Return True if any Salesforce auth secrets are present."""
     try:
         sec = st.secrets.get("salesforce", {})
-        # Method 1: refresh token
         if sec.get("refresh_token") and sec.get("instance_url"):
             return True
-        # Method 2: username/password
         if sec.get("username") and sec.get("password") and sec.get("security_token"):
             return True
         return False
     except Exception:
         return False
+
+
+def _auth_via_refresh_token(sec) -> "Salesforce | None":
+    """Authenticate using OAuth2 refresh token flow."""
+    import requests
+
+    client_id = sec.get("client_id", "PlatformCLI")
+    token_url = sec.get("token_url", "https://login.salesforce.com/services/oauth2/token")
+
+    resp = requests.post(token_url, data={
+        "grant_type": "refresh_token",
+        "client_id": client_id,
+        "refresh_token": sec["refresh_token"],
+    })
+
+    if resp.status_code != 200:
+        err = resp.json() if resp.text else {}
+        raise RuntimeError(
+            f"Token refresh failed ({resp.status_code}): "
+            f"{err.get('error', '?')} - {err.get('error_description', resp.text[:200])}"
+        )
+
+    token_data = resp.json()
+    access_token = token_data["access_token"]
+    instance_url = token_data.get("instance_url", sec["instance_url"])
+
+    sf = Salesforce(instance_url=instance_url, session_id=access_token)
+    return sf
+
+
+def _auth_via_password(sec) -> "Salesforce | None":
+    """Authenticate using username/password."""
+    sf = Salesforce(
+        username=sec["username"],
+        password=sec["password"],
+        security_token=sec.get("security_token", ""),
+        domain=sec.get("domain", "login"),
+    )
+    return sf
 
 
 @st.cache_resource(show_spinner="Salesforce接続中...")
@@ -62,36 +99,13 @@ def _get_connection() -> "Salesforce | None":
 
         # Method 1: Refresh Token (for SSO / CloudGate)
         if sec.get("refresh_token") and sec.get("instance_url"):
-            client_id = sec.get("client_id", "PlatformCLI")
-            sf = Salesforce(
-                instance_url=sec["instance_url"],
-                session_id="",  # will be replaced by token refresh
-            )
-            # Use OAuth2 refresh to get a valid access token
-            import requests
-            token_url = sec.get("token_url", "https://login.salesforce.com/services/oauth2/token")
-            resp = requests.post(token_url, data={
-                "grant_type": "refresh_token",
-                "client_id": client_id,
-                "refresh_token": sec["refresh_token"],
-            })
-            resp.raise_for_status()
-            token_data = resp.json()
-            sf = Salesforce(
-                instance_url=token_data.get("instance_url", sec["instance_url"]),
-                session_id=token_data["access_token"],
-            )
-            return sf
+            logger.info("Attempting refresh token auth...")
+            return _auth_via_refresh_token(sec)
 
         # Method 2: Username/Password
         if sec.get("username") and sec.get("password"):
-            sf = Salesforce(
-                username=sec["username"],
-                password=sec["password"],
-                security_token=sec.get("security_token", ""),
-                domain=sec.get("domain", "login"),
-            )
-            return sf
+            logger.info("Attempting username/password auth...")
+            return _auth_via_password(sec)
 
     except Exception as e:
         logger.error("Failed to connect to Salesforce: %s", e)
