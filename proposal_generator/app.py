@@ -748,6 +748,10 @@ with tab1:
             st.caption("📦 Box連携: box_config.json未設定 (access_tokenを設定するとBoxフォルダと連携できます)")
 
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
+        # DEBUG: Show SF connection status
+        _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
+        st.caption(f"Salesforce: {_sf_status}")
+
         sf_keyword = st.text_input(
             "商談名で検索（Enter で実行）",
             placeholder="例：田中貴金属、Mizkan、コスモ精機 など",
