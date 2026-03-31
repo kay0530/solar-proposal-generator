@@ -30,6 +30,8 @@ except Exception as _import_err:
     st.error(f"Import error: {_import_err}\n\n{traceback.format_exc()}")
     st.stop()
 
+from proposal_generator import sf_client as _sf_cloud
+
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
@@ -86,8 +88,8 @@ if not Path(_SF_CMD).exists():
     _SF_CMD = "sf"
 
 
-def _sf_query(query: str, timeout: int = 20) -> list[dict]:
-    """Run a SOQL query via sf CLI and return records list."""
+def _sf_query_cli(query: str, timeout: int = 20) -> list[dict]:
+    """Run a SOQL query via sf CLI and return records list (local fallback)."""
     # Windows .cmd files require shell=True.
     # Escape % as %% to prevent cmd.exe env-var expansion in LIKE clauses.
     escaped_query = query.replace("%", "%%")
@@ -105,6 +107,13 @@ def _sf_query(query: str, timeout: int = 20) -> list[dict]:
     out = stdout_bytes.decode("utf-8", errors="replace")
     data = json.loads(out)
     return data.get("result", {}).get("records", [])
+
+
+def _sf_query(query: str, timeout: int = 20) -> list[dict]:
+    """Run a SOQL query. Uses simple-salesforce (Cloud) first, then sf CLI (local)."""
+    if _sf_cloud.is_available():
+        return _sf_cloud.sf_query(query)
+    return _sf_query_cli(query, timeout=timeout)
 
 
 def _tokenize_keyword(kw: str) -> list[str]:
