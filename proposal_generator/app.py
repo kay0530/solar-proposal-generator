@@ -13,7 +13,6 @@ import re as _re
 import subprocess
 import sys
 import tempfile
-import traceback
 from pathlib import Path
 
 # Ensure parent dir is on sys.path so `from proposal_generator...` works from any CWD
@@ -21,16 +20,9 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-try:
-    import streamlit as st
-    import yaml
-    from streamlit_sortables import sort_items
-except Exception as _import_err:
-    import streamlit as st
-    st.error(f"Import error: {_import_err}\n\n{traceback.format_exc()}")
-    st.stop()
-
-from proposal_generator import sf_client as _sf_cloud
+import streamlit as st
+import yaml
+from streamlit_sortables import sort_items
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -88,8 +80,8 @@ if not Path(_SF_CMD).exists():
     _SF_CMD = "sf"
 
 
-def _sf_query_cli(query: str, timeout: int = 20) -> list[dict]:
-    """Run a SOQL query via sf CLI and return records list (local fallback)."""
+def _sf_query(query: str, timeout: int = 20) -> list[dict]:
+    """Run a SOQL query via sf CLI and return records list."""
     # Windows .cmd files require shell=True.
     # Escape % as %% to prevent cmd.exe env-var expansion in LIKE clauses.
     escaped_query = query.replace("%", "%%")
@@ -107,13 +99,6 @@ def _sf_query_cli(query: str, timeout: int = 20) -> list[dict]:
     out = stdout_bytes.decode("utf-8", errors="replace")
     data = json.loads(out)
     return data.get("result", {}).get("records", [])
-
-
-def _sf_query(query: str, timeout: int = 20) -> list[dict]:
-    """Run a SOQL query. Uses simple-salesforce (Cloud) first, then sf CLI (local)."""
-    if _sf_cloud.is_available():
-        return _sf_cloud.sf_query(query)
-    return _sf_query_cli(query, timeout=timeout)
 
 
 def _tokenize_keyword(kw: str) -> list[str]:
@@ -242,7 +227,7 @@ def _apply_quote_to_session(q: dict) -> None:
         st.session_state["panel_types"] = len(panels)
         st.session_state["panel_input_mode"] = "手動入力"  # radio key (no suffix)
         for i, p in enumerate(panels):
-            w_match = _re_mod.search(r"([\d.]+)", str(p.get("output", "")))
+            w_match = _re_mod.search(r"(\d+)", str(p.get("output", "")))
             watt = float(w_match.group(1)) if w_match else 0
             st.session_state[f"panel_model_{i}"] = f"{p['maker']} {p['model']}".strip()
             st.session_state[f"panel_manual_output_{i}"] = watt
@@ -254,16 +239,16 @@ def _apply_quote_to_session(q: dict) -> None:
         st.session_state["pcs_types"] = len(pcs_list)
         st.session_state["pcs_input_mode"] = "手動入力"
         for i, pc in enumerate(pcs_list):
-            kw_match = _re_mod.search(r"([\d.]+)", str(pc.get("output", "")))
+            kw_match = _re_mod.search(r"(\d+)", str(pc.get("output", "")))
             kw = float(kw_match.group(1)) if kw_match else 0
             st.session_state[f"pcs_model_{i}"] = f"{pc['maker']} {pc['model']}".strip()
             st.session_state[f"pcs_manual_output_{i}"] = kw
             st.session_state[f"pcs_manual_count_{i}"] = pc["count"]
 
-    # Battery data
+    # Battery data (residential row 86 and/or industrial row 89)
     bats = q.get("batteries", [])
     if bats:
-        st.session_state["bat_types"] = len(bats)
+        st.session_state["battery_types"] = len(bats)
         st.session_state["bat_input_mode"] = "手動入力"
         for i, b in enumerate(bats):
             st.session_state[f"bat_model_{i}"] = f"{b['maker']} {b['model']}".strip()
@@ -310,16 +295,6 @@ def load_electricity_master() -> list[dict]:
         return []
 
 
-def _parse_output_value(raw) -> float:
-    """Parse an output value that may be a number or a string like '4.95kW'."""
-    if raw is None:
-        return 0.0
-    if isinstance(raw, (int, float)):
-        return float(raw)
-    m = _re.search(r"([\d.]+)", str(raw))
-    return float(m.group(1)) if m else 0.0
-
-
 def load_equipment_master() -> tuple[dict[str, list[dict]], str]:
     """Load active equipment records from Salesforce, grouped by MachineType__c.
 
@@ -348,7 +323,7 @@ def load_equipment_master() -> tuple[dict[str, list[dict]], str]:
             "name": r.get("Name", ""),
             "maker": maker,
             "katasiki": katasiki,
-            "output": _parse_output_value(r.get("Output__c")),
+            "output": r.get("Output__c") or 0.0,
         })
     return grouped, ""
 
@@ -759,10 +734,6 @@ with tab1:
             st.caption("📦 Box連携: box_config.json未設定 (access_tokenを設定するとBoxフォルダと連携できます)")
 
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
-        # DEBUG: Show SF connection status
-        _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
-        st.caption(f"Salesforce: {_sf_status}")
-
         sf_keyword = st.text_input(
             "商談名で検索（Enter で実行）",
             placeholder="例：田中貴金属、Mizkan、コスモ精機 など",
@@ -920,101 +891,6 @@ with tab2:
     else:
         system_capacity = total_panel_kw
 
-    # ----- Pricing -----
-    with st.expander("💰 価格情報", expanded=False):
-
-        price_col1, price_col2 = st.columns(2)
-        with price_col1:
-            st.markdown("**入力項目**")
-            # Use quote data as defaults if available
-            if "_quote_kw_unit_cost" in st.session_state and "kw_unit_cost_input" not in st.session_state:
-                st.session_state["kw_unit_cost_input"] = st.session_state["_quote_kw_unit_cost"]
-            if "_quote_gross_margin_pct" in st.session_state and "gross_margin_input" not in st.session_state:
-                st.session_state["gross_margin_input"] = st.session_state["_quote_gross_margin_pct"]
-            if "_quote_commission_rate" in st.session_state and "commission_input" not in st.session_state:
-                st.session_state["commission_input"] = st.session_state["_quote_commission_rate"]
-
-            if "kw_unit_cost_input" not in st.session_state:
-                st.session_state["kw_unit_cost_input"] = 0
-            if "gross_margin_input" not in st.session_state:
-                st.session_state["gross_margin_input"] = 0.0
-            if "commission_input" not in st.session_state:
-                st.session_state["commission_input"] = 0.0
-
-            kw_unit_cost = st.number_input(
-                "kW原価 (円/kW)",
-                min_value=0, step=1000,
-                key="kw_unit_cost_input",
-                help="設備1kWあたりの原価",
-            )
-            gross_margin_pct = st.number_input(
-                "粗利率 (%)",
-                min_value=0.0, max_value=99.9, step=0.5,
-                key="gross_margin_input",
-            )
-            sales_commission_pct = st.number_input(
-                "販売手数料 (%)",
-                min_value=0.0, max_value=100.0, step=0.5,
-                key="commission_input",
-                help="例：販売価格の3%を手数料として支払う場合",
-            )
-
-        with price_col2:
-            st.markdown("**自動算出**")
-            # If quote data has exact prices, use those
-            _q_sell = st.session_state.get("_quote_selling_price", 0)
-            _q_raw = st.session_state.get("_quote_raw_cost", 0)
-
-            if _q_raw > 0 and _q_sell > 0:
-                # Use exact values from quote
-                raw_cost = _q_raw
-                selling_price = _q_sell
-                gross_profit = selling_price - raw_cost
-            else:
-                # Calculate from kW unit cost and margin
-                raw_cost = kw_unit_cost * total_panel_kw
-                margin_rate = gross_margin_pct / 100.0
-                if margin_rate > 0 and margin_rate < 1 and raw_cost > 0:
-                    gross_profit = raw_cost * margin_rate / (1 - margin_rate)
-                    selling_price_raw = raw_cost + gross_profit
-                    selling_price = _round_100(selling_price_raw)
-                else:
-                    gross_profit = 0.0
-                    selling_price = 0
-
-            commission_amount = (
-                selling_price * sales_commission_pct / 100.0
-                if sales_commission_pct > 0 and selling_price > 0
-                else 0.0
-            )
-
-            st.metric(
-                "原価",
-                f"¥{raw_cost:,.0f}",
-                help="見積書から取得" if _q_raw > 0 else f"kW原価 × パネル合計kW",
-            )
-            st.metric("粗利", f"¥{gross_profit:,.0f}")
-            _kw_sell = int(selling_price / total_panel_kw) if selling_price and total_panel_kw > 0 else 0
-            st.metric("販売価格", f"¥{selling_price:,.0f}",
-                      delta=f"¥{_kw_sell:,}/kW" if _kw_sell else None, delta_color="off")
-            if commission_amount > 0:
-                st.metric(
-                    f"販売手数料（{sales_commission_pct:.1f}%）",
-                    f"¥{commission_amount:,.0f}",
-                )
-                # Net margin = gross profit - commission
-                net_profit = gross_profit - commission_amount
-                net_margin_pct = (net_profit / selling_price * 100) if selling_price > 0 else 0.0
-                st.metric(
-                    "実質粗利",
-                    f"¥{net_profit:,.0f}",
-                    delta=f"実質粗利率 {net_margin_pct:.1f}%",
-                    delta_color="normal",
-                )
-            else:
-                net_profit = gross_profit
-                net_margin_pct = gross_margin_pct
-
     # ----- Contract Terms -----
     with st.expander("📋 契約条件", expanded=True):
         if is_epc:
@@ -1111,6 +987,101 @@ with tab2:
                 "現在の年間電気代 (円)", min_value=0, step=100000, value=0,
                 help="PP7・PP8の電気代削減額試算に使用します",
             )
+
+    # ----- Pricing -----
+    with st.expander("💰 価格情報", expanded=False):
+
+        price_col1, price_col2 = st.columns(2)
+        with price_col1:
+            st.markdown("**入力項目**")
+            # Use quote data as defaults if available
+            if "_quote_kw_unit_cost" in st.session_state and "kw_unit_cost_input" not in st.session_state:
+                st.session_state["kw_unit_cost_input"] = st.session_state["_quote_kw_unit_cost"]
+            if "_quote_gross_margin_pct" in st.session_state and "gross_margin_input" not in st.session_state:
+                st.session_state["gross_margin_input"] = st.session_state["_quote_gross_margin_pct"]
+            if "_quote_commission_rate" in st.session_state and "commission_input" not in st.session_state:
+                st.session_state["commission_input"] = st.session_state["_quote_commission_rate"]
+
+            if "kw_unit_cost_input" not in st.session_state:
+                st.session_state["kw_unit_cost_input"] = 0
+            if "gross_margin_input" not in st.session_state:
+                st.session_state["gross_margin_input"] = 0.0
+            if "commission_input" not in st.session_state:
+                st.session_state["commission_input"] = 0.0
+
+            kw_unit_cost = st.number_input(
+                "kW原価 (円/kW)",
+                min_value=0, step=1000,
+                key="kw_unit_cost_input",
+                help="設備1kWあたりの原価",
+            )
+            gross_margin_pct = st.number_input(
+                "粗利率 (%)",
+                min_value=0.0, max_value=99.9, step=0.5,
+                key="gross_margin_input",
+            )
+            sales_commission_pct = st.number_input(
+                "販売手数料 (%)",
+                min_value=0.0, max_value=100.0, step=0.5,
+                key="commission_input",
+                help="例：販売価格の3%を手数料として支払う場合",
+            )
+
+        with price_col2:
+            st.markdown("**自動算出**")
+            # If quote data has exact prices, use those
+            _q_sell = st.session_state.get("_quote_selling_price", 0)
+            _q_raw = st.session_state.get("_quote_raw_cost", 0)
+
+            if _q_raw > 0 and _q_sell > 0:
+                # Use exact values from quote
+                raw_cost = _q_raw
+                selling_price = _q_sell
+                gross_profit = selling_price - raw_cost
+            else:
+                # Calculate from kW unit cost and margin
+                raw_cost = kw_unit_cost * total_panel_kw
+                margin_rate = gross_margin_pct / 100.0
+                if margin_rate > 0 and margin_rate < 1 and raw_cost > 0:
+                    gross_profit = raw_cost * margin_rate / (1 - margin_rate)
+                    selling_price_raw = raw_cost + gross_profit
+                    selling_price = _round_100(selling_price_raw)
+                else:
+                    gross_profit = 0.0
+                    selling_price = 0
+
+            commission_amount = (
+                selling_price * sales_commission_pct / 100.0
+                if sales_commission_pct > 0 and selling_price > 0
+                else 0.0
+            )
+
+            st.metric(
+                "原価",
+                f"¥{raw_cost:,.0f}",
+                help="見積書から取得" if _q_raw > 0 else f"kW原価 × パネル合計kW",
+            )
+            st.metric("粗利", f"¥{gross_profit:,.0f}")
+            _kw_sell = int(selling_price / total_panel_kw) if selling_price and total_panel_kw > 0 else 0
+            st.metric("販売価格", f"¥{selling_price:,.0f}",
+                      delta=f"¥{_kw_sell:,}/kW" if _kw_sell else None, delta_color="off")
+            if commission_amount > 0:
+                st.metric(
+                    f"販売手数料（{sales_commission_pct:.1f}%）",
+                    f"¥{commission_amount:,.0f}",
+                )
+                # Net margin = gross profit - commission
+                net_profit = gross_profit - commission_amount
+                net_margin_pct = (net_profit / selling_price * 100) if selling_price > 0 else 0.0
+                st.metric(
+                    "実質粗利",
+                    f"¥{net_profit:,.0f}",
+                    delta=f"実質粗利率 {net_margin_pct:.1f}%",
+                    delta_color="normal",
+                )
+            else:
+                net_profit = gross_profit
+                net_margin_pct = gross_margin_pct
 
     # ----- Subsidy -----
     with st.expander("🏦 補助金", expanded=False):
@@ -1259,9 +1230,7 @@ with tab2:
                     _gen = float(_row[3]) if _row[3] and _row[3] != "-" else 0.0
                     _demand = float(_row[4]) if _row[4] and _row[4] != "-" else 0.0
                     _surplus = float(_row[6]) if _row[6] and _row[6] != "-" else 0.0
-                    # Calculate self-consumption from raw values to avoid
-                    # per-row rounding in the pre-calculated CSV column
-                    _self_c = min(_gen, _demand)
+                    _self_c = float(_row[7]) if _row[7] and _row[7] != "-" else 0.0
                 except (ValueError, IndexError):
                     continue
                 _total_gen += _gen
@@ -1359,11 +1328,18 @@ with tab2:
             )
 
             _ipals_now = st.session_state.get("ipals_data", {})
-            _sc_y1 = _ipals_now.get("self_consumption_kwh", 0.0)
+            _sc_y1_raw = _ipals_now.get("self_consumption_kwh", 0.0)
             _sur_y1 = _ipals_now.get("surplus_kwh", 0.0)
 
             _ac_col1, _ac_col2 = st.columns(2)
             with _ac_col1:
+                _correction_pct = st.number_input(
+                    "自家消費補正係数 (%)",
+                    min_value=0.0, max_value=20.0, value=5.0, step=0.5,
+                    key="consumption_correction_pct",
+                    help="自家消費量を保守的に見積もるための補正率（例: 5% → 自家消費量×0.95）",
+                )
+                _sc_y1 = _sc_y1_raw * (1 - _correction_pct / 100)
                 _include_sur = st.checkbox(
                     "余剰売電収入を計上する（通常はRPRのためオフ）",
                     value=False,
@@ -1399,8 +1375,13 @@ with tab2:
                     _om_annual = system_capacity * _maint_per_kw + _insure_fixed
                     st.caption(f"年間O&M合計: ¥{_om_annual:,.0f}")
             with _ac_col2:
-                if _sc_y1 > 0:
-                    st.metric("自家消費量（初年度）", f"{_sc_y1:,.0f} kWh")
+                if _sc_y1_raw > 0:
+                    st.metric("自家消費量（初年度）", f"{_sc_y1_raw:,.0f} kWh")
+                    st.metric(
+                        f"補正後（{_correction_pct:.1f}%減）",
+                        f"{_sc_y1:,.0f} kWh",
+                        delta=f"{_sc_y1 - _sc_y1_raw:,.0f} kWh" if _correction_pct > 0 else None,
+                    )
                     st.metric("元本（販売価格 - 補助金）", f"¥{max(selling_price - subsidy_amount, 0):,.0f}")
                     st.metric("システム容量", f"{system_capacity:.1f} kW")
                 else:
