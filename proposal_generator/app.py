@@ -731,7 +731,7 @@ with tab1:
                     except Exception as e:
                         st.error(f"Box保存エラー: {e}")
         else:
-            st.caption("📦 Box連携: box_config.json未設定 (access_tokenを設定するとBoxフォルダと連携できます)")
+            st.caption("📦 Box連携: 未設定 (box_config.json または .streamlit/secrets.toml の [box] access_token を設定するとBoxフォルダと連携できます)")
 
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
         sf_keyword = st.text_input(
@@ -801,10 +801,19 @@ with tab1:
 
     col1, col2, col3 = st.columns(3)
     with col1:
+        _size_options = ["", "大企業", "中小企業", "その他（学校法人・医療法人等）"]
+        _current_ptype = st.session_state.get("proposal_type", "")
+        _is_ppa_mode = not str(_current_ptype).startswith("EPC")
         company_size = st.selectbox(
             "企業規模",
-            ["", "大企業", "中小企業", "その他（学校法人・医療法人等）"],
+            _size_options,
+            index=_size_options.index("中小企業") if _is_ppa_mode else 0,
+            key="company_size",
         )
+        if _is_ppa_mode:
+            st.caption("※PPA事業者（オルテナジー）の規模が適用されます")
+        else:
+            st.caption("※取引先の企業規模を選択してください")
     with col2:
         proposal_date = st.date_input("提案日")
         site_survey = st.selectbox("現地調査", ["", "実施済み", "未実施"])
@@ -818,11 +827,20 @@ with tab1:
 
 with tab2:
     # ----- Proposal Type -----
+    def _on_proposal_type_change():
+        """Reset company_size default when switching PPA/EPC."""
+        ptype = st.session_state.get("proposal_type", "")
+        if str(ptype).startswith("EPC"):
+            st.session_state["company_size"] = ""
+        else:
+            st.session_state["company_size"] = "中小企業"
+
     proposal_type = st.radio(
         "提案タイプ",
         ["PPA（第三者所有）", "EPC（販売）"],
         key="proposal_type",
         horizontal=True,
+        on_change=_on_proposal_type_change,
     )
     is_epc = proposal_type.startswith("EPC")
 
@@ -1294,6 +1312,15 @@ with tab2:
             else:
                 st.session_state.pop("layout_image_path", None)
 
+            # Compass direction selector
+            st.selectbox(
+                "方位",
+                options=["北", "北東", "東", "南東", "南", "南西", "西", "北西"],
+                index=4,  # Default: 南
+                key="compass_direction",
+                help="パネル設置面の方位（レイアウト画像上に方位マークを表示します）",
+            )
+
         with _layout_col2:
             st.markdown("**積載荷重計算表**")
             _load_calc_file = st.file_uploader(
@@ -1710,6 +1737,9 @@ with tab2:
     _lc_data = st.session_state.get("load_calc_data")
     if _lc_data:
         st.session_state["customer_data"]["load_calc"] = _lc_data
+    _compass = st.session_state.get("compass_direction")
+    if _compass:
+        st.session_state["customer_data"]["compass_direction"] = _compass
 
     # Compute annual_saving for PP7/PP8/new_summary
     _cd = st.session_state["customer_data"]

@@ -26,17 +26,28 @@ DEALS_FOLDER_ID = "164168692319"  # 案件進捗 folder
 
 
 def _load_config() -> dict:
-    if not CONFIG_PATH.exists():
-        return {}
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    """Load Box config from box_config.json or st.secrets["box"]."""
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    # Fallback: Streamlit secrets  [box] access_token = "xxxx"
+    try:
+        import streamlit as st
+        if "box" in st.secrets:
+            return dict(st.secrets["box"])
+    except Exception:
+        pass
+    return {}
 
 
 def _headers() -> dict:
     cfg = _load_config()
     token = cfg.get("access_token", "")
     if not token:
-        raise BoxAuthError("access_tokenが未設定です。box_config.jsonを確認してください。")
+        raise BoxAuthError(
+            "access_tokenが未設定です。box_config.json または "
+            "st.secrets[\"box\"][\"access_token\"] を設定してください。"
+        )
     return {"Authorization": f"Bearer {token}"}
 
 

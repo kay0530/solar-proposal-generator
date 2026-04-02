@@ -41,6 +41,11 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         # Fallback: show basic system info from customer_data
         _render_fallback(slide, data, y)
 
+    # Overlay compass indicator when direction is specified
+    compass_dir = data.get("compass_direction")
+    if compass_dir and has_image:
+        _render_compass_indicator(slide, compass_dir)
+
     add_footer(slide)
 
 
@@ -226,3 +231,68 @@ def _render_load_table(slide, data: dict, x, y, w) -> None:
                 _set_cell_bg(cell, C_WHITE)
             else:
                 _set_cell_bg(cell, C_LIGHT_GRAY)
+
+
+# ---------------------------------------------------------------------------
+# Compass direction indicator
+# ---------------------------------------------------------------------------
+
+# Arrow characters pointing toward each compass direction
+_COMPASS_ARROWS = {
+    "北": "↑",
+    "北東": "↗",
+    "東": "→",
+    "南東": "↘",
+    "南": "↓",
+    "南西": "↙",
+    "西": "←",
+    "北西": "↖",
+}
+
+
+def _render_compass_indicator(slide, direction: str) -> None:
+    """Draw a small compass indicator box in the top-right corner of the slide.
+
+    Shows "N" label with an arrow indicating the selected direction.
+    Positioned just below the header bar, right-aligned.
+    """
+    box_w = Inches(0.65)
+    box_h = Inches(0.65)
+    box_x = SLIDE_W - MARGIN - box_w
+    box_y = CONTENT_TOP + Inches(0.05)
+
+    arrow = _COMPASS_ARROWS.get(direction, "↓")
+
+    # White background box with border
+    bg = add_rounded_rect(
+        slide, box_x, box_y, box_w, box_h,
+        C_WHITE, radius_pt=4.0,
+        border_color=C_BORDER, border_pt=1.0,
+    )
+
+    # "N" label at top
+    add_textbox(
+        slide, box_x, box_y + Inches(0.02),
+        box_w, Inches(0.22),
+        "N",
+        font_name=FONT_BLACK, font_size_pt=14,
+        font_color=C_DARK, bold=True, align=PP_ALIGN.CENTER,
+    )
+
+    # Arrow character
+    add_textbox(
+        slide, box_x, box_y + Inches(0.20),
+        box_w, Inches(0.25),
+        arrow,
+        font_name=FONT_BODY, font_size_pt=18,
+        font_color=C_ORANGE, bold=True, align=PP_ALIGN.CENTER,
+    )
+
+    # Direction label at bottom
+    add_textbox(
+        slide, box_x, box_y + Inches(0.45),
+        box_w, Inches(0.18),
+        direction,
+        font_name=FONT_BODY, font_size_pt=8,
+        font_color=C_SUB, align=PP_ALIGN.CENTER,
+    )
