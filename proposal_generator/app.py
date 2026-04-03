@@ -821,18 +821,12 @@ with tab1:
     col1, col2, col3 = st.columns(3)
     with col1:
         _size_options = ["", "大企業", "中小企業", "その他（学校法人・医療法人等）"]
-        _current_ptype = st.session_state.get("proposal_type", "")
-        _is_ppa_mode = not str(_current_ptype).startswith("EPC")
         company_size = st.selectbox(
             "企業規模",
             _size_options,
-            index=_size_options.index("中小企業") if _is_ppa_mode else 0,
             key="company_size",
         )
-        if _is_ppa_mode:
-            st.caption("※PPA事業者（オルテナジー）の規模が適用されます")
-        else:
-            st.caption("※取引先の企業規模を選択してください")
+        st.caption("※需要家（取引先）の企業規模を選択してください")
     with col2:
         proposal_date = st.date_input("提案日")
         site_survey = st.selectbox("現地調査", ["", "実施済み", "未実施"])
@@ -846,20 +840,11 @@ with tab1:
 
 with tab2:
     # ----- Proposal Type -----
-    def _on_proposal_type_change():
-        """Reset company_size default when switching PPA/EPC."""
-        ptype = st.session_state.get("proposal_type", "")
-        if str(ptype).startswith("EPC"):
-            st.session_state["company_size"] = ""
-        else:
-            st.session_state["company_size"] = "中小企業"
-
     proposal_type = st.radio(
         "提案タイプ",
         ["PPA（第三者所有）", "EPC（販売）"],
         key="proposal_type",
         horizontal=True,
-        on_change=_on_proposal_type_change,
     )
     is_epc = proposal_type.startswith("EPC")
 
