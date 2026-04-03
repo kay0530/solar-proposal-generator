@@ -227,7 +227,7 @@ def _apply_quote_to_session(q: dict) -> None:
         st.session_state["panel_types"] = len(panels)
         st.session_state["panel_input_mode"] = "手動入力"  # radio key (no suffix)
         for i, p in enumerate(panels):
-            w_match = _re_mod.search(r"(\d+)", str(p.get("output", "")))
+            w_match = _re_mod.search(r"([\d.]+)", str(p.get("output", "")))
             watt = float(w_match.group(1)) if w_match else 0
             st.session_state[f"panel_model_{i}"] = f"{p['maker']} {p['model']}".strip()
             st.session_state[f"panel_manual_output_{i}"] = watt
@@ -239,7 +239,7 @@ def _apply_quote_to_session(q: dict) -> None:
         st.session_state["pcs_types"] = len(pcs_list)
         st.session_state["pcs_input_mode"] = "手動入力"
         for i, pc in enumerate(pcs_list):
-            kw_match = _re_mod.search(r"(\d+)", str(pc.get("output", "")))
+            kw_match = _re_mod.search(r"([\d.]+)", str(pc.get("output", "")))
             kw = float(kw_match.group(1)) if kw_match else 0
             st.session_state[f"pcs_model_{i}"] = f"{pc['maker']} {pc['model']}".strip()
             st.session_state[f"pcs_manual_output_{i}"] = kw
@@ -295,6 +295,16 @@ def load_electricity_master() -> list[dict]:
         return []
 
 
+def _parse_sf_output(val) -> float:
+    """Parse Output__c which may be a number or string like '4.95kW'."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    m = _re.search(r"([\d.]+)", str(val))
+    return float(m.group(1)) if m else 0.0
+
+
 def load_equipment_master() -> tuple[dict[str, list[dict]], str]:
     """Load active equipment records from Salesforce, grouped by MachineType__c.
 
@@ -323,7 +333,7 @@ def load_equipment_master() -> tuple[dict[str, list[dict]], str]:
             "name": r.get("Name", ""),
             "maker": maker,
             "katasiki": katasiki,
-            "output": r.get("Output__c") or 0.0,
+            "output": _parse_sf_output(r.get("Output__c")),
         })
     return grouped, ""
 
@@ -1452,14 +1462,27 @@ with tab2:
                     _md = _calc_res.get("min_dscr")
                     st.metric("最小DSCR（最終年）", f"{_md:.3f}" if _md else "—")
 
-                # Apply button
-                if st.button(
-                    f"この単価を適用 → {_calc_res['min_ppa_price']:.1f} 円/kWh",
-                    key="apply_ppa_price",
-                    type="secondary",
-                ):
-                    st.session_state["ppa_price_input"] = float(_calc_res["min_ppa_price"])
-                    st.rerun()
+                # Apply button + manual adjustment
+                _auto_price = float(_calc_res["min_ppa_price"])
+                _adj_col1, _adj_col2 = st.columns([1, 1])
+                with _adj_col1:
+                    if st.button(
+                        f"この単価を適用 → {_auto_price:.1f} 円/kWh",
+                        key="apply_ppa_price",
+                        type="secondary",
+                    ):
+                        st.session_state["ppa_price_input"] = _auto_price
+                        st.rerun()
+                with _adj_col2:
+                    _manual_ppa = st.number_input(
+                        "手動調整 (円/kWh)",
+                        min_value=0.0, step=0.5, format="%.1f",
+                        value=st.session_state.get("ppa_price_input", _auto_price),
+                        key="ppa_manual_adj",
+                    )
+                    if st.button("この値を適用", key="apply_manual_ppa"):
+                        st.session_state["ppa_price_input"] = _manual_ppa
+                        st.rerun()
 
                 # Cashflow table
                 _cf = _calc_res.get("cashflow_table", [])
