@@ -73,6 +73,8 @@ catalog = profiles_data["slide_catalog"]
 # Salesforce helpers
 # ---------------------------------------------------------------------------
 
+from proposal_generator import sf_client as _sf_cloud
+
 _SF_CMD = os.path.join(
     os.path.expanduser("~"), "AppData", "Roaming", "npm", "sf.cmd"
 )
@@ -80,14 +82,10 @@ if not Path(_SF_CMD).exists():
     _SF_CMD = "sf"
 
 
-def _sf_query(query: str, timeout: int = 20) -> list[dict]:
-    """Run a SOQL query via sf CLI and return records list."""
-    # Windows .cmd files require shell=True.
-    # Escape % as %% to prevent cmd.exe env-var expansion in LIKE clauses.
+def _sf_query_cli(query: str, timeout: int = 20) -> list[dict]:
+    """Run a SOQL query via sf CLI and return records list (local fallback)."""
     escaped_query = query.replace("%", "%%")
     cmd = f'"{_SF_CMD}" data query --query "{escaped_query}" --json'
-    # CREATE_NO_WINDOW prevents DLL init failure (0xC0000142) when called
-    # from Streamlit's process context on Windows.
     kwargs: dict = dict(capture_output=True, timeout=timeout, shell=True)
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -99,6 +97,13 @@ def _sf_query(query: str, timeout: int = 20) -> list[dict]:
     out = stdout_bytes.decode("utf-8", errors="replace")
     data = json.loads(out)
     return data.get("result", {}).get("records", [])
+
+
+def _sf_query(query: str, timeout: int = 20) -> list[dict]:
+    """Run a SOQL query. Uses simple-salesforce (Cloud) first, then sf CLI (local)."""
+    if _sf_cloud.is_available():
+        return _sf_cloud.sf_query(query)
+    return _sf_query_cli(query, timeout=timeout)
 
 
 def _tokenize_keyword(kw: str) -> list[str]:
@@ -175,11 +180,13 @@ def _parse_quote_excel(uploaded_file) -> dict:
                 qty_i = 0
             if qty_i <= 0:
                 continue
-            cap = ws2.cell(r, 7).value  # G = capacity (kWh)
+            cap = ws2.cell(r, 7).value  # G = capacity (kWh) - may be "15kWh" string
             try:
                 cap_f = float(cap) if cap is not None else 0
             except (ValueError, TypeError):
-                cap_f = 0
+                # Extract number from string like "15kWh", "215"
+                _cap_m = _re.search(r"([\d.]+)", str(cap)) if cap else None
+                cap_f = float(_cap_m.group(1)) if _cap_m else 0
             if cap_f > 0:
                 batteries.append({
                     "text": ws2.cell(r, 3).value or "",
@@ -744,6 +751,8 @@ with tab1:
             st.caption("📦 Box連携: 未設定 (box_config.json または .streamlit/secrets.toml の [box] access_token を設定するとBoxフォルダと連携できます)")
 
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
+        _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
+        st.caption(f"Salesforce: {_sf_status}")
         sf_keyword = st.text_input(
             "商談名で検索（Enter で実行）",
             placeholder="例：田中貴金属、Mizkan、コスモ精機 など",
