@@ -826,7 +826,16 @@ with tab1:
             _size_options,
             key="company_size",
         )
-        st.caption("※需要家（取引先）の企業規模を選択してください")
+        _ptype = st.session_state.get("proposal_type", "")
+        _subsidy = st.session_state.get("subsidy_select", "なし")
+        _is_ppa = not str(_ptype).startswith("EPC")
+        _is_tokyo = "東京都" in str(_subsidy)
+        if _is_ppa and not _is_tokyo:
+            st.caption("※PPA + 環境省等: PPA事業者（中小企業）の規模が適用")
+        elif _is_ppa and _is_tokyo:
+            st.caption("※PPA + 東京都: 需要家（取引先）の規模が適用")
+        else:
+            st.caption("※取引先の企業規模を選択してください")
     with col2:
         proposal_date = st.date_input("提案日")
         site_survey = st.selectbox("現地調査", ["", "実施済み", "未実施"])
