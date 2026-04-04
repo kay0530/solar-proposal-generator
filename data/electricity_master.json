@@ -1,0 +1,1748 @@
+[
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "高圧電力A",
+    "basic": 1466.5,
+    "peak": null,
+    "summer": 19.76,
+    "other": 18.63,
+    "night": null
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "高圧季節別時間帯別電力A",
+    "basic": 1466.5,
+    "peak": 23.48,
+    "summer": 22.76,
+    "other": 21.34,
+    "night": 15.35
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "高圧電力",
+    "basic": 1989,
+    "peak": null,
+    "summer": 18.55,
+    "other": 17.54,
+    "night": null
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "高圧季節別時間帯別電力",
+    "basic": 1989,
+    "peak": 21.49,
+    "summer": 20.83,
+    "other": 19.35,
+    "night": 15.35
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "業務用電力",
+    "basic": 1890,
+    "peak": null,
+    "summer": 19.93,
+    "other": 18.77,
+    "night": null
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "業務用季節別時間帯別電力",
+    "basic": 1890,
+    "peak": 22.81,
+    "summer": 22.1,
+    "other": 20.67,
+    "night": 15.35
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "特別高圧電力B-20kV",
+    "basic": 1770,
+    "peak": null,
+    "summer": 17.92,
+    "other": 16.97,
+    "night": null
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "特別高圧電力B-60kV",
+    "basic": 1715,
+    "peak": null,
+    "summer": 17.67,
+    "other": 16.75,
+    "night": null
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "特別高圧電力B-140kV",
+    "basic": 1660,
+    "peak": null,
+    "summer": 17.43,
+    "other": 16.53,
+    "night": null
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "特別高圧季節別時間帯別電力B-20kV",
+    "basic": 1770,
+    "peak": 20.25,
+    "summer": 19.64,
+    "other": 18.49,
+    "night": 15.19
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "特別高圧季節別時間帯別電力B-60kV",
+    "basic": 1715,
+    "peak": 20.03,
+    "summer": 19.43,
+    "other": 18.28,
+    "night": 14.96
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "特別高圧季節別時間帯別電力B-140kV",
+    "basic": 1660,
+    "peak": 19.81,
+    "summer": 19.2,
+    "other": 18,
+    "night": 14.81
+  },
+  {
+    "company": "東京電力エナジーパートナー㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "東京電力パワーグリッド㈱",
+    "contract": "最終保障電力B-6kV",
+    "basic": 3636,
+    "peak": null,
+    "summer": 19.87,
+    "other": 19.87,
+    "night": null
+  },
+  {
+    "company": "東京電力パワーグリッド㈱",
+    "contract": "最終保障電力B-20kV",
+    "basic": 3576,
+    "peak": null,
+    "summer": 18.26,
+    "other": 18.26,
+    "night": null
+  },
+  {
+    "company": "東京電力パワーグリッド㈱",
+    "contract": "最終保障電力B-60kV",
+    "basic": 3576,
+    "peak": null,
+    "summer": 18.26,
+    "other": 18.26,
+    "night": null
+  },
+  {
+    "company": "東京電力パワーグリッド㈱",
+    "contract": "最終保障電力B-140kV",
+    "basic": 3576,
+    "peak": null,
+    "summer": 18.26,
+    "other": 18.26,
+    "night": null
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力（一般料金）",
+    "basic": 2693.2,
+    "peak": 23.4,
+    "summer": 23.4,
+    "other": 23.4,
+    "night": 23.4
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力（時間帯別料金）",
+    "basic": 2693.2,
+    "peak": 25.69,
+    "summer": 25.69,
+    "other": 25.69,
+    "night": 19.91
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力（業務用ウイークエンド電力）",
+    "basic": 3254.2,
+    "peak": 21.23,
+    "summer": 21.23,
+    "other": 21.23,
+    "night": 20.2
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力（一般料金）",
+    "basic": 2880.2,
+    "peak": 21.62,
+    "summer": 21.62,
+    "other": 21.62,
+    "night": 21.62
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力（時間帯別料金）",
+    "basic": 2880.2,
+    "peak": 23.01,
+    "summer": 23.01,
+    "other": 23.1,
+    "night": 19.91
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力Ⅰ型（一般料金）",
+    "basic": 2264.2,
+    "peak": 23.16,
+    "summer": 23.16,
+    "other": 23.16,
+    "night": 23.16
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力Ⅰ型（時間帯別料金）",
+    "basic": 2264.2,
+    "peak": 25.85,
+    "summer": 25.85,
+    "other": 25.85,
+    "night": 19.91
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力Ⅱ型（一般料金）",
+    "basic": 2550.2,
+    "peak": 22.33,
+    "summer": 22.33,
+    "other": 22.33,
+    "night": 22.33
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力Ⅱ型（時間帯別料金）",
+    "basic": 2550.2,
+    "peak": 24.35,
+    "summer": 24.35,
+    "other": 24.35,
+    "night": 19.91
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力Ⅲ型（一般料金）",
+    "basic": 3287.2,
+    "peak": 20.55,
+    "summer": 20.55,
+    "other": 20.55,
+    "night": 20.55
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "高圧電力Ⅲ型（時間帯別料金）",
+    "basic": 3287.2,
+    "peak": 21.07,
+    "summer": 21.07,
+    "other": 21.07,
+    "night": 19.91
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力-30kV（一般料金）",
+    "basic": 2630.5,
+    "peak": 21.02,
+    "summer": 21.02,
+    "other": 21.02,
+    "night": 21.02
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力-30kV（時間帯別料金）",
+    "basic": 2630.5,
+    "peak": 21.97,
+    "summer": 21.97,
+    "other": 21.97,
+    "night": 19.49
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力-60kV（一般料金）",
+    "basic": 2619.5,
+    "peak": 20.98,
+    "summer": 20.98,
+    "other": 20.98,
+    "night": 20.98
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "業務量電力-60kV（時間帯別料金）",
+    "basic": 2619.5,
+    "peak": 21.9,
+    "summer": 21.9,
+    "other": 21.9,
+    "night": 19.45
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "特別高圧電力-30kV（一般料金）",
+    "basic": 2696.5,
+    "peak": 20.07,
+    "summer": 20.07,
+    "other": 20.07,
+    "night": 20.07
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "特別高圧電力-30kV（時間帯別料金）",
+    "basic": 2696.5,
+    "peak": 20.63,
+    "summer": 20.63,
+    "other": 20.63,
+    "night": 19.49
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "特別高圧電力-60kV（一般料金）",
+    "basic": 2685.5,
+    "peak": 20.03,
+    "summer": 20.03,
+    "other": 20.03,
+    "night": 20.03
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "特別高圧電力-60kV（時間帯別料金）",
+    "basic": 2685.5,
+    "peak": 20.57,
+    "summer": 20.57,
+    "other": 20.57,
+    "night": 19.45
+  },
+  {
+    "company": "北海道電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "業務量電力",
+    "basic": 2053.7,
+    "peak": null,
+    "summer": 21.83,
+    "other": 20.63,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "業務用季節別時間帯別電力",
+    "basic": 2053.7,
+    "peak": 25.58,
+    "summer": 24.04,
+    "other": 22.98,
+    "night": 16.59
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "業務用ウィークエンド電力",
+    "basic": 2053.7,
+    "peak": null,
+    "summer": 23.14,
+    "other": 21.73,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "臨時電力A",
+    "basic": 0,
+    "peak": null,
+    "summer": 24.32,
+    "other": 22.88,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "高圧電力",
+    "basic": 2372.7,
+    "peak": null,
+    "summer": 19.75,
+    "other": 18.76,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "高圧季節別時間帯別電力",
+    "basic": 2372.7,
+    "peak": 22.96,
+    "summer": 21.65,
+    "other": 20.36,
+    "night": 16.59
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "高圧電力S",
+    "basic": 1712.7,
+    "peak": null,
+    "summer": 21.39,
+    "other": 20.25,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "高圧季節別時間帯別電力S",
+    "basic": 1712.7,
+    "peak": 25.63,
+    "summer": 24.08,
+    "other": 22.72,
+    "night": 16.59
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧電力A-30kV",
+    "basic": 1996.5,
+    "peak": null,
+    "summer": 19.62,
+    "other": 18.6,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧電力A-60kV",
+    "basic": 1974.5,
+    "peak": null,
+    "summer": 19.26,
+    "other": 18.27,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧季節別時間帯別電力A-30kV",
+    "basic": 1996.5,
+    "peak": 22.72,
+    "summer": 21.41,
+    "other": 20.44,
+    "night": 15.84
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧季節別時間帯別電力A-60kV",
+    "basic": 1974.5,
+    "peak": 22.28,
+    "summer": 21.01,
+    "other": 20.05,
+    "night": 15.58
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧電力B-30kV",
+    "basic": 2172.5,
+    "peak": null,
+    "summer": 18.71,
+    "other": 17.77,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧電力B-60kV",
+    "basic": 2106.5,
+    "peak": null,
+    "summer": 18.35,
+    "other": 17.44,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧電力B-140kV",
+    "basic": 2040.5,
+    "peak": null,
+    "summer": 17.98,
+    "other": 17.11,
+    "night": null
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧季節別時間帯別電力B-30kV",
+    "basic": 2172.5,
+    "peak": 21.7,
+    "summer": 20.48,
+    "other": 19.26,
+    "night": 15.84
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧季節別時間帯別電力B-60kV",
+    "basic": 2106.5,
+    "peak": 21.23,
+    "summer": 20.05,
+    "other": 18.87,
+    "night": 15.58
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "特別高圧季節別時間帯別電力B-140kV",
+    "basic": 2040.5,
+    "peak": 20.75,
+    "summer": 19.62,
+    "other": 18.49,
+    "night": 15.33
+  },
+  {
+    "company": "東北電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力WE（プランA）",
+    "basic": 1716.26,
+    "peak": 21.34,
+    "summer": 21.34,
+    "other": 20.15,
+    "night": 17.26
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力WE（プランB）",
+    "basic": 1914.26,
+    "peak": 19.74,
+    "summer": 19.74,
+    "other": 18.69,
+    "night": 17.26
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力WE（プランC）",
+    "basic": 2002.26,
+    "peak": 19.44,
+    "summer": 19.44,
+    "other": 18.42,
+    "night": 17.26
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力FR（プランA）",
+    "basic": 1716.26,
+    "peak": null,
+    "summer": 20.3,
+    "other": 19.21,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力FR（プランB）",
+    "basic": 1914.26,
+    "peak": null,
+    "summer": 19.18,
+    "other": 18.19,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力FR（プランC）",
+    "basic": 2002.26,
+    "peak": null,
+    "summer": 18.97,
+    "other": 18,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW未満）第２種プランL",
+    "basic": 1352.74,
+    "peak": null,
+    "summer": 21.24,
+    "other": 20.04,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW未満）第２種プランH",
+    "basic": 1738.26,
+    "peak": null,
+    "summer": 19.31,
+    "other": 18.31,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW以上）第２種プランA",
+    "basic": 1738.26,
+    "peak": null,
+    "summer": 19.31,
+    "other": 18.31,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW以上）第２種プランB",
+    "basic": 1936.26,
+    "peak": null,
+    "summer": 18.42,
+    "other": 17.48,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-20kV/30kV第２種プランA",
+    "basic": 1667.81,
+    "peak": null,
+    "summer": 18.69,
+    "other": 17.71,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-20kV/30kV第２種プランB",
+    "basic": 1788.28,
+    "peak": null,
+    "summer": 18,
+    "other": 17.09,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-20kV/30kV第２種プランC",
+    "basic": 1942.28,
+    "peak": null,
+    "summer": 17.56,
+    "other": 16.69,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-70kV第２種プランA",
+    "basic": 1625.9,
+    "peak": null,
+    "summer": 18.53,
+    "other": 17.57,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-70kV第２種プランB",
+    "basic": 1746.38,
+    "peak": null,
+    "summer": 17.84,
+    "other": 16.95,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-70kV第２種プランC",
+    "basic": 1900.38,
+    "peak": null,
+    "summer": 17.41,
+    "other": 16.54,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-20kV/30kV第２種プランA",
+    "basic": 1679.33,
+    "peak": null,
+    "summer": 18.41,
+    "other": 17.46,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-20kV/30kV第２種プランB",
+    "basic": 1877.33,
+    "peak": null,
+    "summer": 17.46,
+    "other": 16.59,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-70kV第２種プランA",
+    "basic": 1637.43,
+    "peak": null,
+    "summer": 18.19,
+    "other": 17.25,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-70kV第２種プランB",
+    "basic": 1835.43,
+    "peak": null,
+    "summer": 17.23,
+    "other": 16.39,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-140kV第２種プランA",
+    "basic": 1595.52,
+    "peak": null,
+    "summer": 17.97,
+    "other": 17.05,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-140kV第２種プランB",
+    "basic": 1793.52,
+    "peak": null,
+    "summer": 16.89,
+    "other": 16.07,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力TOU（タイムプラン）",
+    "basic": 1716.26,
+    "peak": 23.62,
+    "summer": 20.52,
+    "other": 16.96,
+    "night": 17.4
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧業務用電力TOU（タイムプラン２）",
+    "basic": 2002.26,
+    "peak": 21.29,
+    "summer": 18.65,
+    "other": 16.96,
+    "night": 17.4
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW未満）第１種プランL",
+    "basic": 1352.74,
+    "peak": 25.31,
+    "summer": 22.04,
+    "other": 22.04,
+    "night": 16.96
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW未満）第１種プランH",
+    "basic": 1738.26,
+    "peak": 22,
+    "summer": 19.2,
+    "other": 19.2,
+    "night": 16.96
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW以上）第１種プランA",
+    "basic": 1738.26,
+    "peak": 22,
+    "summer": 19.2,
+    "other": 19.2,
+    "night": 16.96
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "高圧電力（500kW以上）第１種プランB",
+    "basic": 1936.26,
+    "peak": 20.38,
+    "summer": 17.92,
+    "other": 17.92,
+    "night": 16.96
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-20kV/30kV第１種プランA",
+    "basic": 1667.81,
+    "peak": 21.87,
+    "summer": 19.04,
+    "other": 19.04,
+    "night": 15.59
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-20kV/30kV第１種プランB",
+    "basic": 1788.28,
+    "peak": 20.6,
+    "summer": 18.03,
+    "other": 18.03,
+    "night": 15.59
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-20kV/30kV第１種プランC",
+    "basic": 1942.28,
+    "peak": 19.8,
+    "summer": 17.39,
+    "other": 17.39,
+    "night": 15.59
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-70kV第１種プランA",
+    "basic": 1625.9,
+    "peak": 21.7,
+    "summer": 18.89,
+    "other": 18.89,
+    "night": 15.44
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-70kV第１種プランB",
+    "basic": 1746.38,
+    "peak": 20.43,
+    "summer": 17.89,
+    "other": 17.89,
+    "night": 15.44
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧業務用電力-70kV第１種プランC",
+    "basic": 1900.38,
+    "peak": 19.63,
+    "summer": 17.25,
+    "other": 17.25,
+    "night": 15.44
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-20kV/30kV第１種プランA",
+    "basic": 1679.33,
+    "peak": 21.6,
+    "summer": 18.84,
+    "other": 18.84,
+    "night": 15.59
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-20kV/30kV第１種プランB",
+    "basic": 1877.33,
+    "peak": 19.79,
+    "summer": 17.39,
+    "other": 17.39,
+    "night": 15.59
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-70kV第１種プランA",
+    "basic": 1637.43,
+    "peak": 21.33,
+    "summer": 18.61,
+    "other": 18.61,
+    "night": 15.44
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-70kV第１種プランB",
+    "basic": 1835.43,
+    "peak": 19.5,
+    "summer": 17.15,
+    "other": 17.15,
+    "night": 15.44
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-140kV第１種プランA",
+    "basic": 1595.52,
+    "peak": 21.12,
+    "summer": 18.45,
+    "other": 18.45,
+    "night": 15.14
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "特別高圧電力-140kV第１種プランB",
+    "basic": 1793.52,
+    "peak": 19.07,
+    "summer": 16.79,
+    "other": 16.79,
+    "night": 15.14
+  },
+  {
+    "company": "中部電力ミライズ㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "業務用電力",
+    "basic": 2151,
+    "peak": null,
+    "summer": 27.25,
+    "other": 27.25,
+    "night": null
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "業務用季節別時間帯別電力",
+    "basic": 2151,
+    "peak": 27.88,
+    "summer": 27.88,
+    "other": 27.88,
+    "night": 25.86
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "高圧電力A",
+    "basic": 1876,
+    "peak": null,
+    "summer": 27.53,
+    "other": 27.53,
+    "night": null
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "季節別時間帯別電力A",
+    "basic": 1876,
+    "peak": 28.67,
+    "summer": 28.67,
+    "other": 28.67,
+    "night": 25.86
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "高圧電力B",
+    "basic": 2151,
+    "peak": null,
+    "summer": 26.34,
+    "other": 26.34,
+    "night": null
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "季節別時間帯別電力B",
+    "basic": 2151,
+    "peak": 26.61,
+    "summer": 26.61,
+    "other": 26.61,
+    "night": 25.86
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "業務用特別高圧電力",
+    "basic": 2090.5,
+    "peak": null,
+    "summer": 25.95,
+    "other": 25.95,
+    "night": null
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "業務用特別高圧季節別時間帯別電力",
+    "basic": 2090.5,
+    "peak": 26.22,
+    "summer": 26.22,
+    "other": 26.22,
+    "night": 25.26
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "特別高圧電力",
+    "basic": 2090.5,
+    "peak": null,
+    "summer": 25.41,
+    "other": 25.41,
+    "night": null
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "特別高圧季節別時間帯別電力",
+    "basic": 2090.5,
+    "peak": 25.49,
+    "summer": 25.49,
+    "other": 25.49,
+    "night": 25.26
+  },
+  {
+    "company": "北陸電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力AS（500kW未満）",
+    "basic": 1911.8,
+    "peak": null,
+    "summer": 18.07,
+    "other": 17,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力BS（500kW未満）",
+    "basic": 2043.8,
+    "peak": null,
+    "summer": 16.68,
+    "other": 15.73,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力AL（500kW以上）",
+    "basic": 1911.8,
+    "peak": null,
+    "summer": 18.07,
+    "other": 17,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力BL（500kW以上）",
+    "basic": 2043.8,
+    "peak": null,
+    "summer": 16.68,
+    "other": 15.73,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力A-20kV/30kV",
+    "basic": 1754.5,
+    "peak": null,
+    "summer": 16.55,
+    "other": 15.58,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力A-70kV",
+    "basic": 1710.5,
+    "peak": null,
+    "summer": 16.3,
+    "other": 15.36,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力B-20kV/30kV",
+    "basic": 1886.5,
+    "peak": null,
+    "summer": 15.66,
+    "other": 14.79,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力B-70kV",
+    "basic": 1842.5,
+    "peak": null,
+    "summer": 15.34,
+    "other": 14.48,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力AS-TOU（500kW未満）",
+    "basic": 1911.8,
+    "peak": 18.05,
+    "summer": 18.05,
+    "other": 18.05,
+    "night": 15.89
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力BS-TOU（500kW未満）",
+    "basic": 2043.8,
+    "peak": 16.65,
+    "summer": 16.65,
+    "other": 16.65,
+    "night": 15.14
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力AL-TOU（500kW以上）",
+    "basic": 1911.8,
+    "peak": 18.05,
+    "summer": 18.05,
+    "other": 15.89,
+    "night": 15.89
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "高圧電力BL-TOU（500kW以上）",
+    "basic": 2043.8,
+    "peak": 16.65,
+    "summer": 16.65,
+    "other": 16.65,
+    "night": 15.14
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力A-TOU-20kV/30kV",
+    "basic": 1754.5,
+    "peak": 16.43,
+    "summer": 16.43,
+    "other": 16.43,
+    "night": 14.81
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力A-TOU-70kV",
+    "basic": 1710.5,
+    "peak": 16.2,
+    "summer": 16.2,
+    "other": 16.2,
+    "night": 14.58
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力B-TOU-20kV/30kV",
+    "basic": 1886.5,
+    "peak": 15.48,
+    "summer": 15.48,
+    "other": 15.48,
+    "night": 14.34
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "特別高圧電力B-TOU-70kV",
+    "basic": 1842.5,
+    "peak": 15.16,
+    "summer": 15.16,
+    "other": 15.16,
+    "night": 14.06
+  },
+  {
+    "company": "関西電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "業務用電力",
+    "basic": 1996.5,
+    "peak": null,
+    "summer": 22.17,
+    "other": 20.73,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "業務用TOU",
+    "basic": 1996.5,
+    "peak": 27.22,
+    "summer": 23.5,
+    "other": 22.44,
+    "night": 17.76
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "高圧電力A",
+    "basic": 1507,
+    "peak": null,
+    "summer": 22.74,
+    "other": 21.25,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "高圧電力B",
+    "basic": 1996.5,
+    "peak": null,
+    "summer": 20.58,
+    "other": 19.28,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "高圧TOUA",
+    "basic": 1507,
+    "peak": 29.17,
+    "summer": 25.12,
+    "other": 23.7,
+    "night": 17.76
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "高圧TOUB",
+    "basic": 1996.5,
+    "peak": 25.03,
+    "summer": 21.69,
+    "other": 20.35,
+    "night": 17.76
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧電力A-20kV",
+    "basic": 1842.5,
+    "peak": null,
+    "summer": 19.08,
+    "other": 17.88,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧電力A-60kV",
+    "basic": 1826,
+    "peak": null,
+    "summer": 18.97,
+    "other": 17.79,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧TOUA-20kV",
+    "basic": 1842.5,
+    "peak": 22.44,
+    "summer": 19.62,
+    "other": 18.61,
+    "night": 16.62
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧TOUA-60kV",
+    "basic": 1826,
+    "peak": 22.29,
+    "summer": 19.5,
+    "other": 18.51,
+    "night": 16.52
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧電力B-20kV",
+    "basic": 1842.5,
+    "peak": null,
+    "summer": 18.36,
+    "other": 17.24,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧電力B-60kV",
+    "basic": 1826,
+    "peak": null,
+    "summer": 18.24,
+    "other": 17.13,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧電力B-100kV",
+    "basic": 1793,
+    "peak": null,
+    "summer": 18.06,
+    "other": 16.96,
+    "night": null
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧TOUB-20kV",
+    "basic": 1842.5,
+    "peak": 21.58,
+    "summer": 18.9,
+    "other": 17.66,
+    "night": 16.62
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧TOUB-60kV",
+    "basic": 1826,
+    "peak": 21.44,
+    "summer": 18.78,
+    "other": 17.54,
+    "night": 16.52
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "特別高圧TOUB-100kV",
+    "basic": 1793,
+    "peak": 21.18,
+    "summer": 18.57,
+    "other": 17.36,
+    "night": 16.38
+  },
+  {
+    "company": "中国電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "業務用電力",
+    "basic": 1665.08,
+    "peak": null,
+    "summer": 28.66,
+    "other": 27.48,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "業務用電力(500kW以上)",
+    "basic": 1665.08,
+    "peak": null,
+    "summer": 28.66,
+    "other": 27.48,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "特別高圧電力A-20kV",
+    "basic": 1747.85,
+    "peak": null,
+    "summer": 25.95,
+    "other": 24.95,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "特別高圧電力A-60kV",
+    "basic": 1715.37,
+    "peak": null,
+    "summer": 25.74,
+    "other": 24.77,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "高圧電力A（500kW未満）",
+    "basic": 1412.61,
+    "peak": null,
+    "summer": 29.76,
+    "other": 28.47,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "高圧電力B（500kW以上）",
+    "basic": 1935.37,
+    "peak": null,
+    "summer": 26.82,
+    "other": 25.77,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "特別高圧電力B-20kV",
+    "basic": 1791.85,
+    "peak": null,
+    "summer": 25.28,
+    "other": 24.35,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "特別高圧電力B-60kV",
+    "basic": 1759.37,
+    "peak": null,
+    "summer": 25.08,
+    "other": 24.16,
+    "night": null
+  },
+  {
+    "company": "四国電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用電力A",
+    "basic": 2142.78,
+    "peak": null,
+    "summer": 16.98,
+    "other": 16.05,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用電力A-I",
+    "basic": 1416.78,
+    "peak": null,
+    "summer": 22.59,
+    "other": 21.14,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用電力A-20kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 15.51,
+    "other": 14.69,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用電力A-60kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 15.51,
+    "other": 14.69,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用季時別電力A",
+    "basic": 2142.78,
+    "peak": 19.74,
+    "summer": 17.27,
+    "other": 16.32,
+    "night": 15.17
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用季時別電力A-I",
+    "basic": 1416.78,
+    "peak": 29.25,
+    "summer": 25.15,
+    "other": 24.12,
+    "night": 15.17
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用季時別電力A-20kV",
+    "basic": 1917.55,
+    "peak": 17.72,
+    "summer": 15.55,
+    "other": 14.73,
+    "night": 14.26
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用季時別電力A-60kV",
+    "basic": 1917.55,
+    "peak": 17.72,
+    "summer": 15.55,
+    "other": 14.73,
+    "night": 14.26
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用休日エコノミー電力A",
+    "basic": 2142.78,
+    "peak": null,
+    "summer": 18.1,
+    "other": 17.08,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用休日エコノミー電力A-20kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 16.54,
+    "other": 15.61,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "業務用休日エコノミー電力A-60kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 16.54,
+    "other": 15.61,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用電力A",
+    "basic": 2142.78,
+    "peak": null,
+    "summer": 16.5,
+    "other": 15.61,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用電力A-I",
+    "basic": 1471.78,
+    "peak": null,
+    "summer": 19.99,
+    "other": 18.77,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用電力A-20kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 15.12,
+    "other": 14.33,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用電力A-60kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 15.12,
+    "other": 14.33,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用電力A-100kV",
+    "basic": 1917.55,
+    "peak": null,
+    "summer": 15.12,
+    "other": 14.33,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用電力A-200kV",
+    "basic": 1785.55,
+    "peak": null,
+    "summer": 13.76,
+    "other": 13,
+    "night": null
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用季時別電力A",
+    "basic": 2142.78,
+    "peak": 19.74,
+    "summer": 17.27,
+    "other": 16.32,
+    "night": 15.17
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用季時別電力A-I",
+    "basic": 1471.78,
+    "peak": 26.66,
+    "summer": 23.14,
+    "other": 21.87,
+    "night": 15.57
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用季時別電力A-20kV",
+    "basic": 1917.55,
+    "peak": 17.72,
+    "summer": 15.55,
+    "other": 14.73,
+    "night": 14.26
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用季時別電力A-60kV",
+    "basic": 1917.55,
+    "peak": 17.72,
+    "summer": 15.55,
+    "other": 14.73,
+    "night": 14.26
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用季時別電力A-100kV",
+    "basic": 1917.55,
+    "peak": 17.72,
+    "summer": 15.55,
+    "other": 14.73,
+    "night": 14.26
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "産業用季時別電力A-200kV",
+    "basic": 1785.55,
+    "peak": 17.43,
+    "summer": 15.31,
+    "other": 14.52,
+    "night": 11.01
+  },
+  {
+    "company": "九州電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "業務用電力",
+    "basic": 1967.93,
+    "peak": null,
+    "summer": 32.87,
+    "other": 31.38,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "業務用季節別時間帯別電力",
+    "basic": 1967.93,
+    "peak": 38.86,
+    "summer": 35.01,
+    "other": 33.8,
+    "night": 28.22
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "業務用電力Ⅱ型",
+    "basic": 2424.43,
+    "peak": null,
+    "summer": 31.12,
+    "other": 29.79,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "業務用ウィークエンド電力",
+    "basic": 2424.43,
+    "peak": null,
+    "summer": 31.91,
+    "other": 30.52,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "高圧電力A",
+    "basic": 1841.43,
+    "peak": null,
+    "summer": 30.94,
+    "other": 29.62,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "季節別時間帯別電力A",
+    "basic": 1841.43,
+    "peak": 34.39,
+    "summer": 32.26,
+    "other": 30.76,
+    "night": 28.22
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "高圧電力B",
+    "basic": 2242.93,
+    "peak": null,
+    "summer": 29.95,
+    "other": 28.72,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "季節別時間帯別電力B",
+    "basic": 2242.93,
+    "peak": 33.27,
+    "summer": 30.35,
+    "other": 29.18,
+    "night": 28.22
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧電力A-20kV",
+    "basic": 1869.49,
+    "peak": null,
+    "summer": 32.33,
+    "other": 30.92,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧電力A-60kV",
+    "basic": 1858.49,
+    "peak": null,
+    "summer": 32.09,
+    "other": 30.7,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧季節別時間帯別電力A-20kV",
+    "basic": 1869.49,
+    "peak": 38.05,
+    "summer": 34.4,
+    "other": 33.25,
+    "night": 27.98
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧季節別時間帯別電力A-60kV",
+    "basic": 1858.49,
+    "peak": 37.72,
+    "summer": 34.13,
+    "other": 32.99,
+    "night": 27.77
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧電力B-20kV",
+    "basic": 2039.99,
+    "peak": null,
+    "summer": 29.73,
+    "other": 28.54,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧電力B-60kV",
+    "basic": 1973.99,
+    "peak": null,
+    "summer": 29.48,
+    "other": 28.32,
+    "night": null
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧季節別時間帯別電力B-20kV",
+    "basic": 2039.99,
+    "peak": 32.94,
+    "summer": 30.13,
+    "other": 29,
+    "night": 27.98
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "特別高圧季節別時間帯別電力B-60kV",
+    "basic": 1973.99,
+    "peak": 32.63,
+    "summer": 29.88,
+    "other": 28.77,
+    "night": 27.77
+  },
+  {
+    "company": "沖縄電力㈱",
+    "contract": "None",
+    "basic": 0,
+    "peak": null,
+    "summer": 0,
+    "other": 0,
+    "night": null
+  }
+]

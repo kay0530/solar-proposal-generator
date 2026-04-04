@@ -282,7 +282,11 @@ def load_electricity_master() -> list[dict]:
 
     Returns list of dicts with keys: company, contract, basic, peak, summer, other, night.
     Rates are 税込 (new unit prices, cols P-T = 16-20).
+
+    Falls back to bundled JSON file (data/electricity_master.json) when Excel
+    is unavailable (e.g. Streamlit Cloud deployment).
     """
+    # --- Try Excel first (local environment) ---
     try:
         import openpyxl
         wb = openpyxl.load_workbook(EXCEL_PATH, data_only=True, read_only=True)
@@ -304,6 +308,14 @@ def load_electricity_master() -> list[dict]:
             })
         wb.close()
         return records
+    except Exception:
+        pass
+
+    # --- Fallback: bundled JSON (Cloud deployment) ---
+    json_path = Path(__file__).resolve().parent.parent / "data" / "electricity_master.json"
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
         return []
 
@@ -1586,8 +1598,68 @@ with tab2:
                             min_value=0, value=120_000, step=10_000,
                             key="ppa_insure_fixed",
                         )
-                    _om_annual = system_capacity * _maint_per_kw + _insure_fixed
-                    st.caption(f"年間O&M合計: ¥{_om_annual:,.0f}")
+                    # -- Repair reserve (修繕積立費用) --
+                    st.markdown("---")
+                    _repair_rate = st.number_input(
+                        "修繕積立率 (%)",
+                        min_value=0.0, max_value=30.0, value=10.0, step=0.5,
+                        key="ppa_repair_reserve_rate",
+                        help="設備販売価格に対する修繕積立率（契約期間で按分）",
+                    )
+                    _repair_annual = int(selling_price * _repair_rate / 100 / max(int(contract_years), 1))
+                    st.caption(f"修繕積立 年額: ¥{_repair_annual:,.0f}")
+
+                    # -- Removal reserve (撤去費用積立) --
+                    _removal_rate = st.number_input(
+                        "撤去費用積立率 (%)",
+                        min_value=0.0, max_value=20.0, value=4.0, step=0.5,
+                        key="ppa_removal_reserve_rate",
+                        help="設備販売価格に対する撤去費用積立率（契約期間で按分）",
+                    )
+                    _removal_annual = int(selling_price * _removal_rate / 100 / max(int(contract_years), 1))
+                    st.caption(f"撤去費用積立 年額: ¥{_removal_annual:,.0f}")
+
+                    # -- Generator charges (発電側課金) -- only when surplus enabled
+                    _gen_charge_kw_annual = 0
+                    _gen_charge_kwh_annual = 0
+                    if surplus_price > 0:
+                        st.markdown("---")
+                        st.markdown("**発電側課金（余剰売電時）**")
+                        _gen_kw_unit = st.number_input(
+                            "発電側課金 kW単価 (円/kW)",
+                            min_value=0.0, step=10.0, value=0.0,
+                            key="ppa_gen_charge_kw",
+                            help="PCS出力(kW)に対する年間課金",
+                        )
+                        _gen_charge_kw_annual = int(_gen_kw_unit * total_pcs_kw)
+                        if _gen_kw_unit > 0:
+                            st.caption(f"kW課金 年額: ¥{_gen_charge_kw_annual:,.0f}（{total_pcs_kw:.1f} kW × ¥{_gen_kw_unit:,.0f}）")
+
+                        _gen_kwh_unit = st.number_input(
+                            "発電側課金 kWh単価 (円/kWh)",
+                            min_value=0.0, step=0.1, value=0.0,
+                            key="ppa_gen_charge_kwh",
+                            help="余剰電力量(kWh)に対する年間課金",
+                        )
+                        _gen_charge_kwh_annual = int(_gen_kwh_unit * _sur_y1)
+                        if _gen_kwh_unit > 0:
+                            st.caption(f"kWh課金 年額: ¥{_gen_charge_kwh_annual:,.0f}（{_sur_y1:,.0f} kWh × ¥{_gen_kwh_unit:.1f}）")
+
+                    # -- Total O&M summary --
+                    _om_base = system_capacity * _maint_per_kw + _insure_fixed
+                    _om_additional = _repair_annual + _removal_annual + _gen_charge_kw_annual + _gen_charge_kwh_annual
+                    _om_annual = _om_base + _om_additional
+
+                    st.markdown("---")
+                    st.markdown("**年間費用内訳**")
+                    st.caption(f"保守費: ¥{int(system_capacity * _maint_per_kw):,.0f}")
+                    st.caption(f"保安管理: ¥{_insure_fixed:,.0f}")
+                    st.caption(f"修繕積立: ¥{_repair_annual:,.0f}")
+                    st.caption(f"撤去積立: ¥{_removal_annual:,.0f}")
+                    if surplus_price > 0 and (_gen_charge_kw_annual > 0 or _gen_charge_kwh_annual > 0):
+                        st.caption(f"発電側課金(kW): ¥{_gen_charge_kw_annual:,.0f}")
+                        st.caption(f"発電側課金(kWh): ¥{_gen_charge_kwh_annual:,.0f}")
+                    st.caption(f"**年間O&M合計: ¥{_om_annual:,.0f}**")
             with _ac_col2:
                 if _sc_y1_raw > 0:
                     st.metric("自家消費量（初年度）", f"{_sc_y1_raw:,.0f} kWh")
@@ -1616,7 +1688,7 @@ with tab2:
                     include_surplus=_include_sur,
                     target_dscr=_target_dscr,
                     maintenance_yen_per_kw=_maint_per_kw,
-                    insurance_yen_fixed=_insure_fixed,
+                    insurance_yen_fixed=_insure_fixed + _om_additional,
                 )
                 st.session_state["ppa_calc_result"] = _result
 
