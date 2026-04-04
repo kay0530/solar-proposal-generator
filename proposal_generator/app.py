@@ -654,6 +654,19 @@ def _restore_widget_keys(data: dict) -> None:
         if src in data and data[src] is not None:
             st.session_state[dst] = data[src]
 
+    # Restore additional fields not in _DIRECT
+    if "snow_depth" in data:
+        st.session_state["snow_depth"] = data["snow_depth"]
+    if "site_survey" in data:
+        st.session_state["site_survey"] = data["site_survey"]
+    if "compass_angle" in data:
+        st.session_state["compass_angle"] = data["compass_angle"]
+    if "battery_price" in data or "battery_selling_price" in data:
+        _bp = data.get("battery_price") or data.get("battery_selling_price", 0)
+        if _bp:
+            st.session_state["battery_price_input"] = int(_bp)
+            st.session_state["_quote_battery_selling_price"] = int(_bp)
+
     # Restore quote-derived pricing keys so price section picks them up
     if data.get("selling_price"):
         st.session_state["_quote_selling_price"] = int(data["selling_price"])
@@ -1277,12 +1290,12 @@ with tab2:
                     min_value=0,
                     max_value=355,
                     step=5,
-                    value=180,
+                    value=0,
                     key="compass_angle",
                     help="0°=北, 90°=東, 180°=南, 270°=西",
                 )
             with _comp_c2:
-                _angle = st.session_state.get("compass_angle", 180)
+                _angle = st.session_state.get("compass_angle", 0)
                 _dirs = {0: "北", 45: "北東", 90: "東", 135: "南東",
                          180: "南", 225: "南西", 270: "西", 315: "北西"}
                 _dir_name = _dirs.get(_angle, f"{_angle}°")
@@ -1593,8 +1606,8 @@ with tab2:
                         key="ppa_maint_per_kw",
                         help=f"デフォルト: {DEFAULT_MAINTENANCE_YEN_PER_KW:,.0f} 円/kW/年",
                     )
-                    _maint_annual = int(system_capacity * _maint_per_kw)
-                    st.caption(f"保守費 年額: ¥{_maint_annual:,.0f}（{system_capacity:.1f} kW × ¥{_maint_per_kw:,}）")
+                    _maint_annual = int(total_panel_kw * _maint_per_kw)
+                    st.caption(f"保守費 年額: ¥{_maint_annual:,.0f}（DC {total_panel_kw:.2f} kW × ¥{_maint_per_kw:,}）")
                     _security_type = st.radio(
                         "保安管理業務委託費",
                         ["自社 (¥120,000/年)", "先方負担 (¥0)", "他社委託 (金額入力)"],
@@ -1658,13 +1671,13 @@ with tab2:
                             st.caption(f"kWh課金 年額: ¥{_gen_charge_kwh_annual:,.0f}（{_sur_y1:,.0f} kWh × ¥{_gen_kwh_unit:.1f}）")
 
                     # -- Total O&M summary --
-                    _om_base = system_capacity * _maint_per_kw + _insure_fixed
+                    _om_base = total_panel_kw * _maint_per_kw + _insure_fixed
                     _om_additional = _repair_annual + _removal_annual + _gen_charge_kw_annual + _gen_charge_kwh_annual
                     _om_annual = _om_base + _om_additional
 
                     st.markdown("---")
                     st.markdown("**年間費用内訳**")
-                    st.caption(f"保守費: ¥{int(system_capacity * _maint_per_kw):,.0f}")
+                    st.caption(f"保守費: ¥{int(total_panel_kw * _maint_per_kw):,.0f}")
                     st.caption(f"保安管理: ¥{_insure_fixed:,.0f}")
                     st.caption(f"修繕積立: ¥{_repair_annual:,.0f}")
                     st.caption(f"撤去積立: ¥{_removal_annual:,.0f}")
@@ -1947,6 +1960,7 @@ with tab2:
         "batteries": battery_data_list,
         "battery_total_kwh": total_battery_kwh,
         "battery_total_count": total_battery_count,
+        "battery_selling_price": st.session_state.get("_quote_battery_selling_price", 0),
         # Pricing
         "kw_unit_cost": kw_unit_cost,
         "raw_cost": raw_cost,
