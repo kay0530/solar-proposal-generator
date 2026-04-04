@@ -1643,14 +1643,21 @@ with tab2:
             # Show rate info for known companies
             from proposal_generator.ppa_calc import LEASE_RATE_MAP, CE_TARGET_IRR
             if lease_company == "シーエナジー":
-                st.info(f"**シーエナジー**: 目標IRR **{CE_TARGET_IRR*100:.2f}%** → リース金利は自動算出されます")
-                lease_rate = 0.0  # will be goal-seeked in ppa_calc
+                st.info(f"**シーエナジー**: 目標IRR **{CE_TARGET_IRR*100:.2f}%** → リース金利は試算時に自動算出")
+                lease_rate = 0.0  # auto-calculated in ppa_calc
             elif lease_company in LEASE_RATE_MAP:
                 _known_rate = LEASE_RATE_MAP[lease_company]
-                st.info(f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%** (固定)")
-                lease_rate = _known_rate * 100
+                _default_rate = _known_rate * 100
+                lease_rate = st.number_input(
+                    "リース金利 (%)", min_value=0.0, step=0.1, value=_default_rate,
+                    key="lease_rate_input",
+                    help=f"デフォルト: {_default_rate:.1f}%（案件ごとに調整可能）",
+                )
             else:
-                lease_rate = st.number_input("リース金利 (%)", min_value=0.0, step=0.1, value=6.0, key="lease_rate_input")
+                lease_rate = st.number_input(
+                    "リース金利 (%)", min_value=0.0, step=0.1, value=6.0,
+                    key="lease_rate_input",
+                )
 
             lease_years = st.number_input("リース期間 (年)", min_value=1, max_value=30, value=20, key="lease_years_input")
     else:
