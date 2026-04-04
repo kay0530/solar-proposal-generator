@@ -130,31 +130,73 @@ def _calc_ce_lease_rate(
 ) -> float:
     """Calculate lease rate for シーエナジー to achieve target IRR.
 
-    CE's IRR = IRR([-selling_price, +lease_pmt, +lease_pmt, ...])
-    where lease_pmt = PMT(lease_rate, lease_years, principal).
+    Replicates the CE sheet FCF model from the Excel:
+      Year 0: CF = -principal (補助金適用後設備額)
+      Year 1..n: CF = operating_profit × (1 - tax_rate) + depreciation
 
-    Since principal < selling_price (due to subsidy), lease_rate > CE IRR.
-    If no subsidy (principal >= selling_price), lease_rate = target_irr.
+    Revenue = monthly PMT (rounded down to 100 yen) × 12
+    Costs: fixed_asset_tax (on selling_price base, declining),
+           depreciation (straight-line on principal),
+           fire_insurance (selling_price × 0.122%),
+           selling_expense (60,000/yr),
+           interest (CE borrows at 2%, 元金均等返済 on principal)
+
+    Binary search finds lease_rate where IRR(FCF) ≈ target_irr.
     """
     if selling_price <= 0 or principal <= 0 or lease_years <= 0:
         return target_irr
 
-    if principal >= selling_price:
-        return target_irr
+    # CE sheet constants
+    CE_TAX_RATE = 0.31
+    CE_SELLING_EXPENSE = 60_000
+    CE_FIRE_INS_RATE = 0.00122
+    FA_INITIAL_FACTOR = 0.936     # 固定資産評価初年度係数 (D68)
+    FA_DECLINE_FACTOR = 0.873     # 年次逓減係数 (D69 = 1-0.127)
+    FA_TAX_RATE = 0.014           # 固定資産税率 (D70)
 
-    # CE needs this payment to earn target_irr on selling_price
-    target_payment = pmt(target_irr, lease_years, selling_price)
+    fire_insurance = round(selling_price * CE_FIRE_INS_RATE)
+    depreciation = principal / lease_years  # straight-line
+    n_months = lease_years * 12
 
-    # Find lease_rate where pmt(rate, n, principal) = target_payment
-    lo, hi = target_irr, 0.30
+    # Fixed asset tax schedule (based on selling_price, not principal)
+    fa_taxes: list[float] = []
+    assessed = selling_price * FA_INITIAL_FACTOR
+    for year in range(1, lease_years + 1):
+        if year >= 2:
+            assessed *= FA_DECLINE_FACTOR
+        fa_taxes.append(round(assessed * FA_TAX_RATE, 3))
+
+    def _ce_irr_at_rate(lease_rate: float) -> float:
+        mr = lease_rate / 12
+        if mr == 0:
+            m_pmt = principal / n_months
+        else:
+            m_pmt = principal * mr / (1 - (1 + mr) ** (-n_months))
+        m_pmt = int(m_pmt / 100) * 100  # round down to 100 yen
+        annual_rev = m_pmt * 12
+
+        # Unlevered FCF: interest is 営業外費用, NOT included
+        cfs = [-float(principal)]
+        for y in range(1, lease_years + 1):
+            gross = annual_rev - fa_taxes[y - 1] - depreciation - fire_insurance
+            op_profit = gross - CE_SELLING_EXPENSE
+            fcf = op_profit * (1 - CE_TAX_RATE) + depreciation
+            cfs.append(fcf)
+        try:
+            return irr(cfs)
+        except (ZeroDivisionError, ValueError, OverflowError):
+            return 0.0
+
+    # Binary search: IRR increases with lease_rate
+    lo, hi = 0.01, 0.20
     for _ in range(100):
         mid = (lo + hi) / 2
-        mid_pmt = pmt(mid, lease_years, principal)
-        if mid_pmt < target_payment:
+        mid_irr = _ce_irr_at_rate(mid)
+        if mid_irr < target_irr:
             lo = mid
         else:
             hi = mid
-        if abs(mid_pmt - target_payment) < 1.0:
+        if abs(mid_irr - target_irr) < 1e-5:
             break
 
     return round((lo + hi) / 2, 4)
