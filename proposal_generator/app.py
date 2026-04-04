@@ -388,6 +388,10 @@ def _init_state():
         if k not in st.session_state:
             st.session_state[k] = v
 
+    # Apply pending widget values (set from buttons after widget render)
+    if "_pending_ppa_price" in st.session_state:
+        st.session_state["ppa_price_input"] = st.session_state.pop("_pending_ppa_price")
+
 
 def _round_100(val: float) -> int:
     """Round to nearest 100 yen."""
@@ -1417,7 +1421,7 @@ with tab2:
             with ct_col2:
                 ppa_unit_price = st.number_input(
                     "PPA単価 (円/kWh)",
-                    min_value=0.0, step=0.5,
+                    min_value=0.0, step=0.01, format="%.2f",
                     key="ppa_price_input",
                     help="下の「PPA単価自動試算」ボタンで自動入力できます",
                 )
@@ -1644,17 +1648,17 @@ with tab2:
                         key="apply_ppa_price",
                         type="secondary",
                     ):
-                        st.session_state["ppa_price_input"] = _auto_price
+                        st.session_state["_pending_ppa_price"] = _auto_price
                         st.rerun()
                 with _adj_col2:
                     _manual_ppa = st.number_input(
                         "手動調整 (円/kWh)",
-                        min_value=0.0, step=0.5, format="%.1f",
+                        min_value=0.0, step=0.01, format="%.2f",
                         value=st.session_state.get("ppa_price_input", _auto_price),
                         key="ppa_manual_adj",
                     )
                     if st.button("この値を適用", key="apply_manual_ppa"):
-                        st.session_state["ppa_price_input"] = _manual_ppa
+                        st.session_state["_pending_ppa_price"] = _manual_ppa
                         st.rerun()
 
                 # Cashflow table
