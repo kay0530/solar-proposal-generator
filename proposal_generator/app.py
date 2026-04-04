@@ -1347,51 +1347,13 @@ with tab2:
             else:
                 st.session_state.pop("layout_image_path", None)
 
-            # Compass angle selector (5-degree steps) + visual compass
-            _comp_c1, _comp_c2 = st.columns([1, 1])
-            with _comp_c1:
-                st.number_input(
-                    "方位角 (°)",
-                    min_value=0,
-                    max_value=355,
-                    step=5,
-                    value=0,
-                    key="compass_angle",
-                    help="0°=北, 90°=東, 180°=南, 270°=西",
-                )
-            with _comp_c2:
-                _angle = st.session_state.get("compass_angle", 0)
-                _dirs = {0: "北", 45: "北東", 90: "東", 135: "南東",
-                         180: "南", 225: "南西", 270: "西", 315: "北西"}
-                _dir_name = _dirs.get(_angle, f"{_angle}°")
-                st.markdown(f"""
-                <div style="text-align:center; padding:5px 0;">
-                <svg width="100" height="100" viewBox="0 0 100 100">
-                  <g transform="rotate({_angle}, 50, 50)">
-                    <!-- Outer circle -->
-                    <circle cx="50" cy="50" r="42" fill="none" stroke="#888" stroke-width="1.5"/>
-                    <circle cx="50" cy="50" r="3" fill="#888"/>
-                    <!-- N arrow (red) -->
-                    <polygon points="50,12 44,50 50,45 56,50" fill="#E8490F" opacity="0.9"/>
-                    <!-- S arrow (gray) -->
-                    <polygon points="50,88 44,50 50,55 56,50" fill="#666" opacity="0.7"/>
-                    <!-- N label -->
-                    <text x="50" y="9" text-anchor="middle" font-size="10" font-weight="bold" fill="#E8490F">N</text>
-                    <!-- Cardinal ticks -->
-                    <line x1="50" y1="8" x2="50" y2="14" stroke="#E8490F" stroke-width="2"/>
-                    <line x1="92" y1="50" x2="86" y2="50" stroke="#888" stroke-width="1.5"/>
-                    <line x1="50" y1="92" x2="50" y2="86" stroke="#888" stroke-width="1.5"/>
-                    <line x1="8" y1="50" x2="14" y2="50" stroke="#888" stroke-width="1.5"/>
-                    <!-- Intercardinal ticks -->
-                    <line x1="79.7" y1="20.3" x2="75.5" y2="24.5" stroke="#888" stroke-width="1"/>
-                    <line x1="79.7" y1="79.7" x2="75.5" y2="75.5" stroke="#888" stroke-width="1"/>
-                    <line x1="20.3" y1="79.7" x2="24.5" y2="75.5" stroke="#888" stroke-width="1"/>
-                    <line x1="20.3" y1="20.3" x2="24.5" y2="24.5" stroke="#888" stroke-width="1"/>
-                  </g>
-                </svg>
-                <div style="color:#aaa; font-size:0.8em;">真北 {_angle}° ({_dir_name})</div>
-                </div>
-                """, unsafe_allow_html=True)
+            # Interactive compass angle selector
+            from proposal_generator.compass_component import compass_input
+            _compass_val = compass_input(
+                value=st.session_state.get("compass_angle", 0),
+                key="compass_widget",
+            )
+            st.session_state["compass_angle"] = _compass_val
 
         with _layout_col2:
             st.markdown("**積載荷重計算表**")
