@@ -938,7 +938,7 @@ with tab1:
                     except Exception as e:
                         st.error(f"Box保存エラー: {e}")
         else:
-            st.caption("📦 Box連携: 未設定 (box_config.json または .streamlit/secrets.toml の [box] access_token を設定するとBoxフォルダと連携できます)")
+            st.caption("📦 Box連携: 未設定 (box_config.json または .streamlit/secrets.toml の [box] セクションに client_id / client_secret / refresh_token を設定してください)")
 
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
         _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
