@@ -880,117 +880,6 @@ with tab1:
                 st.success("アップロードしたデータを読み込みました")
                 st.rerun()
 
-        # ----- Box integration -----
-        from proposal_generator.box_client import is_available as _box_ok
-
-        if _box_ok():
-            st.divider()
-            st.markdown("**📦 Box連携（03_提案資料）**")
-            _box_deal = st.text_input(
-                "商談名で検索", key="box_deal_search",
-                value=st.session_state.get("sf_office", ""),
-                placeholder="Boxフォルダ名（商談名の一部でOK）",
-            )
-            if _box_deal and st.button("Boxフォルダを検索", key="box_search_btn"):
-                try:
-                    from proposal_generator.box_client import search_deal_folders
-                    _candidates = search_deal_folders(_box_deal)
-                    st.session_state["box_candidates"] = _candidates
-                    st.session_state.pop("box_proposal_folder_id", None)
-                    st.session_state.pop("box_file_list", None)
-                    if not _candidates:
-                        st.warning(f"「{_box_deal}」に一致する商談フォルダが見つかりません")
-                    elif len(_candidates) == 1:
-                        # Single match — auto-select
-                        _sel = _candidates[0]
-                        from proposal_generator.box_client import find_proposal_folder, list_files
-                        _pid = find_proposal_folder(_sel["id"])
-                        if _pid:
-                            st.session_state["box_proposal_folder_id"] = _pid
-                            _files = list_files(_pid)
-                            st.session_state["box_file_list"] = _files
-                            st.success(f"✅ {_sel['name']} → 03_提案資料 ({len(_files)} ファイル)")
-                        else:
-                            st.session_state["box_proposal_folder_id"] = _sel["id"]
-                            st.warning(f"{_sel['name']} に 03_提案資料フォルダがありません（ルートに保存します）")
-                except Exception as e:
-                    st.error(f"Box検索エラー: {e}")
-
-            # Multiple candidates — show selectbox
-            _candidates = st.session_state.get("box_candidates", [])
-            if len(_candidates) > 1 and not st.session_state.get("box_proposal_folder_id"):
-                _options = ["選択してください"] + [c["name"] for c in _candidates]
-                _chosen = st.selectbox("候補から選択", _options, key="box_candidate_select")
-                if _chosen != "選択してください":
-                    _match = next(c for c in _candidates if c["name"] == _chosen)
-                    from proposal_generator.box_client import find_proposal_folder, list_files
-                    _pid = find_proposal_folder(_match["id"])
-                    if _pid:
-                        st.session_state["box_proposal_folder_id"] = _pid
-                        _files = list_files(_pid)
-                        st.session_state["box_file_list"] = _files
-                        st.success(f"✅ {_chosen} → 03_提案資料 ({len(_files)} ファイル)")
-                    else:
-                        st.session_state["box_proposal_folder_id"] = _match["id"]
-                        st.warning(f"{_chosen} に 03_提案資料フォルダがありません（ルートに保存します）")
-
-            _box_files = st.session_state.get("box_file_list", [])
-            if _box_files:
-                _json_files = [f for f in _box_files if f["name"].endswith(".json")]
-                if _json_files:
-                    _box_sel = st.selectbox(
-                        "Boxから案件JSONを読込",
-                        [""] + [f["name"] for f in _json_files],
-                        key="box_load_select",
-                    )
-                    if _box_sel and st.button("Boxから読み込む", key="box_load_btn"):
-                        try:
-                            from proposal_generator.box_client import download_file
-                            _fid = next(f["id"] for f in _json_files if f["name"] == _box_sel)
-                            _tmp = Path(tempfile.mktemp(suffix=".json"))
-                            download_file(_fid, _tmp)
-                            with open(_tmp, "r", encoding="utf-8") as _bf:
-                                _loaded = json.load(_bf)
-                            _tmp.unlink(missing_ok=True)
-                            st.session_state["customer_data"] = _loaded
-                            st.session_state["sf_company"] = _loaded.get("company_name", "")
-                            st.session_state["sf_office"] = _loaded.get("office_name", "")
-                            st.session_state["sf_address"] = _loaded.get("address", "")
-                            st.success(f"Boxから読み込みました: {_box_sel}")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Box読込エラー: {e}")
-
-            # Upload JSON to Box
-            if st.session_state.get("customer_data") and st.session_state.get("box_proposal_folder_id"):
-                if st.button("案件JSONをBoxに保存", key="box_save_json_btn"):
-                    try:
-                        from proposal_generator.box_client import upload_file as _box_upload
-                        _cdata = st.session_state["customer_data"]
-                        _company = (
-                            _cdata.get("office_name")
-                            or _cdata.get("company_name")
-                            or st.session_state.get("sf_office")
-                            or st.session_state.get("sf_company")
-                            or "unknown"
-                        )
-                        _ptype = _cdata.get("proposal_type", "ppa").upper()
-                        _date = _cdata.get("proposal_date", "")
-                        _fname = f"{_company}_{_ptype}_{_date}.json"
-                        _fname = _re.sub(r'[\\/*?:"<>|]', '_', _fname)
-                        _tmp = Path(tempfile.mktemp(suffix=".json"))
-                        with open(_tmp, "w", encoding="utf-8") as _bf:
-                            json.dump(_cdata, _bf, ensure_ascii=False, indent=2, default=str)
-                        _result = _box_upload(
-                            st.session_state["box_proposal_folder_id"], _tmp, _fname
-                        )
-                        _tmp.unlink(missing_ok=True)
-                        st.success(f"Boxに保存しました: {_result['name']}")
-                    except Exception as e:
-                        st.error(f"Box保存エラー: {e}")
-        else:
-            st.caption("📦 Box連携: 未設定 (box_config.json または .streamlit/secrets.toml の [box] セクションに client_id / client_secret / refresh_token を設定してください)")
-
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
         _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
         st.caption(f"Salesforce: {_sf_status}")
@@ -1024,8 +913,123 @@ with tab1:
                 st.session_state["sf_office"] = sel.get("Name", "")
                 st.session_state["sf_address"] = "".join(p for p in parts if p)
                 st.session_state["sf_opp_id"] = sel.get("Id", "")
+
+                # Auto-connect Box folder for selected deal
+                from proposal_generator.box_client import is_available as _box_ok
+                _deal_name = sel.get("Name", "")
+                if _box_ok() and _deal_name:
+                    _prev_box_deal = st.session_state.get("_box_auto_deal", "")
+                    if _deal_name != _prev_box_deal:
+                        try:
+                            from proposal_generator.box_client import search_deal_folders, find_proposal_folder, list_files
+                            _candidates = search_deal_folders(_deal_name)
+                            st.session_state["_box_auto_deal"] = _deal_name
+                            # Exact match preferred
+                            _exact = next((c for c in _candidates if c["name"] == _deal_name), None)
+                            _match = _exact or (_candidates[0] if len(_candidates) == 1 else None)
+                            if _match:
+                                _pid = find_proposal_folder(_match["id"])
+                                _fid = _pid or _match["id"]
+                                st.session_state["box_proposal_folder_id"] = _fid
+                                _files = list_files(_fid) if _pid else []
+                                st.session_state["box_file_list"] = _files
+                                st.success(f"📦 Box連携: {_match['name']} → 03_提案資料 ({len(_files)} ファイル)")
+                            elif len(_candidates) > 1:
+                                st.session_state["box_candidates"] = _candidates
+                                st.info(f"📦 Box: {len(_candidates)}件の候補あり — 下のBox連携セクションで選択してください")
+                            else:
+                                st.caption(f"📦 Box: 「{_deal_name}」のフォルダが見つかりません")
+                        except Exception:
+                            pass
             else:
                 st.info("該当する商談が見つかりませんでした")
+
+        # Box status indicator
+        from proposal_generator.box_client import is_available as _box_ok
+        _box_fid = st.session_state.get("box_proposal_folder_id")
+        if _box_ok() and _box_fid:
+            st.caption(f"📦 Box保存先: 接続済み（保存ボタンでBox同時保存）")
+
+    # ----- Box integration (manual search + JSON read) -----
+    from proposal_generator.box_client import is_available as _box_ok2
+
+    if _box_ok2():
+        with st.expander("📦 Box連携（手動検索・JSON読込）", expanded=False):
+            _box_deal = st.text_input(
+                "商談名で検索", key="box_deal_search",
+                value=st.session_state.get("sf_office", ""),
+                placeholder="Boxフォルダ名（商談名の一部でOK）",
+            )
+            if _box_deal and st.button("Boxフォルダを検索", key="box_search_btn"):
+                try:
+                    from proposal_generator.box_client import search_deal_folders
+                    _candidates = search_deal_folders(_box_deal)
+                    st.session_state["box_candidates"] = _candidates
+                    st.session_state.pop("box_proposal_folder_id", None)
+                    st.session_state.pop("box_file_list", None)
+                    if not _candidates:
+                        st.warning(f"「{_box_deal}」に一致する商談フォルダが見つかりません")
+                    elif len(_candidates) == 1:
+                        _sel = _candidates[0]
+                        from proposal_generator.box_client import find_proposal_folder, list_files
+                        _pid = find_proposal_folder(_sel["id"])
+                        if _pid:
+                            st.session_state["box_proposal_folder_id"] = _pid
+                            _files = list_files(_pid)
+                            st.session_state["box_file_list"] = _files
+                            st.success(f"✅ {_sel['name']} → 03_提案資料 ({len(_files)} ファイル)")
+                        else:
+                            st.session_state["box_proposal_folder_id"] = _sel["id"]
+                            st.warning(f"{_sel['name']} に 03_提案資料フォルダがありません")
+                except Exception as e:
+                    st.error(f"Box検索エラー: {e}")
+
+            # Multiple candidates — show selectbox
+            _candidates = st.session_state.get("box_candidates", [])
+            if len(_candidates) > 1 and not st.session_state.get("box_proposal_folder_id"):
+                _options = ["選択してください"] + [c["name"] for c in _candidates]
+                _chosen = st.selectbox("候補から選択", _options, key="box_candidate_select")
+                if _chosen != "選択してください":
+                    _match = next(c for c in _candidates if c["name"] == _chosen)
+                    from proposal_generator.box_client import find_proposal_folder, list_files
+                    _pid = find_proposal_folder(_match["id"])
+                    if _pid:
+                        st.session_state["box_proposal_folder_id"] = _pid
+                        _files = list_files(_pid)
+                        st.session_state["box_file_list"] = _files
+                        st.success(f"✅ {_chosen} → 03_提案資料 ({len(_files)} ファイル)")
+                    else:
+                        st.session_state["box_proposal_folder_id"] = _match["id"]
+                        st.warning(f"{_chosen} に 03_提案資料フォルダがありません")
+
+            _box_files = st.session_state.get("box_file_list", [])
+            if _box_files:
+                _json_files = [f for f in _box_files if f["name"].endswith(".json")]
+                if _json_files:
+                    _box_sel = st.selectbox(
+                        "Boxから案件JSONを読込",
+                        [""] + [f["name"] for f in _json_files],
+                        key="box_load_select",
+                    )
+                    if _box_sel and st.button("Boxから読み込む", key="box_load_btn"):
+                        try:
+                            from proposal_generator.box_client import download_file
+                            _fid = next(f["id"] for f in _json_files if f["name"] == _box_sel)
+                            _tmp = Path(tempfile.mktemp(suffix=".json"))
+                            download_file(_fid, _tmp)
+                            with open(_tmp, "r", encoding="utf-8") as _bf:
+                                _loaded = json.load(_bf)
+                            _tmp.unlink(missing_ok=True)
+                            st.session_state["customer_data"] = _loaded
+                            st.session_state["sf_company"] = _loaded.get("company_name", "")
+                            st.session_state["sf_office"] = _loaded.get("office_name", "")
+                            st.session_state["sf_address"] = _loaded.get("address", "")
+                            st.success(f"Boxから読み込みました: {_box_sel}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Box読込エラー: {e}")
+    else:
+        st.caption("📦 Box連携: 未設定 (secrets.toml の [box] セクションに client_id / client_secret / refresh_token を設定)")
 
     st.divider()
     st.subheader("顧客・案件情報")
