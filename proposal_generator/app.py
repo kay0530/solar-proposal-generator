@@ -873,21 +873,50 @@ with tab1:
             _box_deal = st.text_input(
                 "商談名で検索", key="box_deal_search",
                 value=st.session_state.get("sf_office", ""),
-                placeholder="Boxフォルダ名（商談名）を入力",
+                placeholder="Boxフォルダ名（商談名の一部でOK）",
             )
             if _box_deal and st.button("Boxフォルダを検索", key="box_search_btn"):
                 try:
-                    from proposal_generator.box_client import get_deal_proposal_folder, list_files
-                    _folder_id = get_deal_proposal_folder(_box_deal)
-                    if _folder_id:
-                        st.session_state["box_proposal_folder_id"] = _folder_id
-                        _files = list_files(_folder_id)
-                        st.session_state["box_file_list"] = _files
-                        st.success(f"03_提案資料フォルダを発見 ({len(_files)} ファイル)")
-                    else:
+                    from proposal_generator.box_client import search_deal_folders
+                    _candidates = search_deal_folders(_box_deal)
+                    st.session_state["box_candidates"] = _candidates
+                    st.session_state.pop("box_proposal_folder_id", None)
+                    st.session_state.pop("box_file_list", None)
+                    if not _candidates:
                         st.warning(f"「{_box_deal}」に一致する商談フォルダが見つかりません")
+                    elif len(_candidates) == 1:
+                        # Single match — auto-select
+                        _sel = _candidates[0]
+                        from proposal_generator.box_client import find_proposal_folder, list_files
+                        _pid = find_proposal_folder(_sel["id"])
+                        if _pid:
+                            st.session_state["box_proposal_folder_id"] = _pid
+                            _files = list_files(_pid)
+                            st.session_state["box_file_list"] = _files
+                            st.success(f"✅ {_sel['name']} → 03_提案資料 ({len(_files)} ファイル)")
+                        else:
+                            st.session_state["box_proposal_folder_id"] = _sel["id"]
+                            st.warning(f"{_sel['name']} に 03_提案資料フォルダがありません（ルートに保存します）")
                 except Exception as e:
                     st.error(f"Box検索エラー: {e}")
+
+            # Multiple candidates — show selectbox
+            _candidates = st.session_state.get("box_candidates", [])
+            if len(_candidates) > 1 and not st.session_state.get("box_proposal_folder_id"):
+                _options = ["選択してください"] + [c["name"] for c in _candidates]
+                _chosen = st.selectbox("候補から選択", _options, key="box_candidate_select")
+                if _chosen != "選択してください":
+                    _match = next(c for c in _candidates if c["name"] == _chosen)
+                    from proposal_generator.box_client import find_proposal_folder, list_files
+                    _pid = find_proposal_folder(_match["id"])
+                    if _pid:
+                        st.session_state["box_proposal_folder_id"] = _pid
+                        _files = list_files(_pid)
+                        st.session_state["box_file_list"] = _files
+                        st.success(f"✅ {_chosen} → 03_提案資料 ({len(_files)} ファイル)")
+                    else:
+                        st.session_state["box_proposal_folder_id"] = _match["id"]
+                        st.warning(f"{_chosen} に 03_提案資料フォルダがありません（ルートに保存します）")
 
             _box_files = st.session_state.get("box_file_list", [])
             if _box_files:

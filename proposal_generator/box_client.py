@@ -156,15 +156,16 @@ def test_connection() -> dict:
     return {"name": user.get("name", ""), "login": user.get("login", "")}
 
 
-def search_deal_folder(deal_name: str) -> Optional[dict]:
-    """Search for a deal folder under 商談 / 案件進捗 by name.
+def search_deal_folders(deal_name: str) -> list[dict]:
+    """Search for deal folders under 商談 / 案件進捗 by name.
 
-    Returns {"id": str, "name": str} or None.
+    Returns list of {"id": str, "name": str} matching the search term.
     Searches multiple parent folders (商談 + 案件進捗).
-    Uses Box search API first, then falls back to listing folder items.
     """
     import re
     search_term = re.split(r'[（(]', deal_name)[0].strip()
+    results: list[dict] = []
+    seen_ids: set[str] = set()
 
     for folder_id in DEALS_FOLDER_IDS:
         # Strategy 1: Box search API
@@ -179,8 +180,12 @@ def search_deal_folder(deal_name: str) -> Optional[dict]:
             if resp.status_code == 200:
                 for entry in resp.json().get("entries", []):
                     name = entry.get("name", "")
-                    if entry.get("type") == "folder" and (deal_name in name or search_term in name):
-                        return {"id": entry["id"], "name": name}
+                    eid = entry.get("id", "")
+                    if entry.get("type") == "folder" and eid not in seen_ids and (
+                        deal_name in name or search_term in name
+                    ):
+                        results.append({"id": eid, "name": name})
+                        seen_ids.add(eid)
         except Exception:
             pass
 
@@ -199,13 +204,26 @@ def search_deal_folder(deal_name: str) -> Optional[dict]:
             if not entries:
                 break
             for entry in entries:
-                if entry.get("type") == "folder" and deal_name in entry.get("name", ""):
-                    return {"id": entry["id"], "name": entry["name"]}
+                eid = entry.get("id", "")
+                if (entry.get("type") == "folder"
+                        and eid not in seen_ids
+                        and search_term in entry.get("name", "")):
+                    results.append({"id": eid, "name": entry["name"]})
+                    seen_ids.add(eid)
             offset += len(entries)
             if len(entries) < 200:
                 break
 
-    return None
+    return results
+
+
+def search_deal_folder(deal_name: str) -> Optional[dict]:
+    """Search for a single deal folder (backward compatible).
+
+    Returns first match or None.
+    """
+    results = search_deal_folders(deal_name)
+    return results[0] if results else None
 
 
 def find_proposal_folder(deal_folder_id: str) -> Optional[str]:
