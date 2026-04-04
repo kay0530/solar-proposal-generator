@@ -635,6 +635,7 @@ def auto_calc_ppa(
 
         dscr_values = [r["dscr"] for r in cashflow_table if r["dscr"] is not None]
         min_dscr = min(dscr_values) if dscr_values else None
+        avg_dscr = sum(dscr_values) / len(dscr_values) if dscr_values else None
 
     # Calculate IRR and NPV from cashflow table
     ppa_irr: float | None = None
@@ -668,6 +669,7 @@ def auto_calc_ppa(
         "min_ppa_price": min_price,
         "cashflow_table": cashflow_table,
         "min_dscr": min_dscr,
+        "avg_dscr": avg_dscr,
         "warnings": warnings_list,
         "finance_type": finance_type,
         "irr_pct": ppa_irr,

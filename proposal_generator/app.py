@@ -1835,8 +1835,8 @@ with tab2:
                 with _r4:
                     st.metric("最小PPA単価（DSCR達成）", f"{_calc_res['min_ppa_price']:.1f} 円/kWh")
                 with _r5:
-                    _md = _calc_res.get("min_dscr")
-                    st.metric("最小DSCR", f"{_md:.3f}" if _md else "—")
+                    _ad = _calc_res.get("avg_dscr")
+                    st.metric("平均DSCR", f"{_ad:.3f}" if _ad else "—")
 
                 # Apply button + manual adjustment
                 _auto_price = float(_calc_res["min_ppa_price"])
