@@ -47,14 +47,22 @@ def calc_all_subsidies(
 
     # --- 1. 環境省 - ストレージパリティ (蓄電池必須) ---
     if has_battery:
-        pv_amount = min(pv_output * 50000, 20_000_000)
-        if battery_kwh <= 20:
-            bat_cond1 = pv_output * 41000
-        else:
-            bat_cond1 = pv_output * 39000
-        bat_cond2 = battery_price * cost_ratio / 3 if battery_price > 0 else 0
-        bat_amount = min(bat_cond1, bat_cond2) if bat_cond2 > 0 else bat_cond1
-        total = pv_amount + bat_amount
+        # PV subsidy: PPA=50,000/kW, EPC=40,000/kW, capped at 20M
+        pv_unit = 40_000 if proposal_type == "epc" else 50_000
+        pv_kw = min(panel_kw, pcs_kw) if panel_kw > 0 and pcs_kw > 0 else 0
+        pv_amount = min(pv_kw * pv_unit, 20_000_000)
+
+        # Battery subsidy: 45,000/kWh (industrial >20kWh: 40,000/kWh)
+        bat_unit = 40_000 if battery_kwh > 20 else 45_000
+        bat_calc = battery_kwh * bat_unit
+        # Cap: min(calculated, battery_price * 1/3), floor to 1000 yen
+        bat_cap = battery_price / 3 if battery_price > 0 else float("inf")
+        bat_amount = math.floor(min(bat_calc, bat_cap) / 1000) * 1000
+        # Battery subsidy capped at 10M
+        bat_amount = min(bat_amount, 10_000_000)
+
+        # Total capped at 30M (PV 20M + ESS 10M)
+        total = min(pv_amount + bat_amount, 30_000_000)
         results.append({
             "name": "環境省（ストレージパリティ）",
             "amount": int(total),

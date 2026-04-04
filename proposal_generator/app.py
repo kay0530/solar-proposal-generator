@@ -1250,13 +1250,15 @@ with tab2:
             else:
                 st.session_state.pop("layout_image_path", None)
 
-            # Compass direction selector
-            st.selectbox(
-                "方位",
-                options=["北", "北東", "東", "南東", "南", "南西", "西", "北西"],
-                index=4,  # Default: 南
-                key="compass_direction",
-                help="パネル設置面の方位（レイアウト画像上に方位マークを表示します）",
+            # Compass angle selector (5-degree steps)
+            st.number_input(
+                "方位角 (°)",
+                min_value=0,
+                max_value=355,
+                step=5,
+                value=180,
+                key="compass_angle",
+                help="0°=北, 90°=東, 180°=南, 270°=西",
             )
 
         with _layout_col2:
@@ -1893,9 +1895,9 @@ with tab2:
     _lc_data = st.session_state.get("load_calc_data")
     if _lc_data:
         st.session_state["customer_data"]["load_calc"] = _lc_data
-    _compass = st.session_state.get("compass_direction")
-    if _compass:
-        st.session_state["customer_data"]["compass_direction"] = _compass
+    _compass_angle = st.session_state.get("compass_angle")
+    if _compass_angle is not None:
+        st.session_state["customer_data"]["compass_angle"] = _compass_angle
 
     # Compute annual_saving for PP7/PP8/new_summary
     _cd = st.session_state["customer_data"]

@@ -41,10 +41,10 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         # Fallback: show basic system info from customer_data
         _render_fallback(slide, data, y)
 
-    # Overlay compass indicator when direction is specified
-    compass_dir = data.get("compass_direction")
-    if compass_dir and has_image:
-        _render_compass_indicator(slide, compass_dir)
+    # Overlay compass indicator when angle is specified
+    compass_angle = data.get("compass_angle")
+    if compass_angle is not None and has_image:
+        _render_compass_indicator(slide, compass_angle)
 
     add_footer(slide)
 
@@ -234,65 +234,82 @@ def _render_load_table(slide, data: dict, x, y, w) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Compass direction indicator
+# Compass direction indicator (rotated by angle)
 # ---------------------------------------------------------------------------
 
-# Arrow characters pointing toward each compass direction
-_COMPASS_ARROWS = {
-    "北": "↑",
-    "北東": "↗",
-    "東": "→",
-    "南東": "↘",
-    "南": "↓",
-    "南西": "↙",
-    "西": "←",
-    "北西": "↖",
+_ANGLE_TO_LABEL = {
+    0: "北", 45: "北東", 90: "東", 135: "南東",
+    180: "南", 225: "南西", 270: "西", 315: "北西",
 }
 
 
-def _render_compass_indicator(slide, direction: str) -> None:
-    """Draw a small compass indicator box in the top-right corner of the slide.
+def _angle_label(angle: int) -> str:
+    """Return a human-readable label for a compass angle."""
+    if angle in _ANGLE_TO_LABEL:
+        return _ANGLE_TO_LABEL[angle]
+    return f"{angle}°"
 
-    Shows "N" label with an arrow indicating the selected direction.
-    Positioned just below the header bar, right-aligned.
+
+def _render_compass_indicator(slide, angle: int) -> None:
+    """Draw a rotatable compass indicator in the top-right corner.
+
+    Uses a triangle (isosceles) shape as the north pointer, rotated by the
+    given angle. The shape.rotation property rotates clockwise in degrees,
+    matching compass bearing convention (0=N, 90=E, 180=S, 270=W).
+
+    The indicator shows:
+    - A bordered box background
+    - A rotated triangle pointing to "N" (north pointer rotated by angle)
+    - "N" text label
+    - Angle / direction label at bottom
     """
-    box_w = Inches(0.65)
-    box_h = Inches(0.65)
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.dml.color import RGBColor as _RGB
+
+    box_w = Inches(0.75)
+    box_h = Inches(0.85)
     box_x = SLIDE_W - MARGIN - box_w
     box_y = CONTENT_TOP + Inches(0.05)
 
-    arrow = _COMPASS_ARROWS.get(direction, "↓")
-
     # White background box with border
-    bg = add_rounded_rect(
+    add_rounded_rect(
         slide, box_x, box_y, box_w, box_h,
         C_WHITE, radius_pt=4.0,
         border_color=C_BORDER, border_pt=1.0,
     )
 
-    # "N" label at top
-    add_textbox(
-        slide, box_x, box_y + Inches(0.02),
-        box_w, Inches(0.22),
-        "N",
-        font_name=FONT_BLACK, font_size_pt=14,
-        font_color=C_DARK, bold=True, align=PP_ALIGN.CENTER,
+    # -- North pointer triangle (rotated) --
+    # The triangle is drawn pointing UP (north) and then rotated by `angle`.
+    # Center it within the box area.
+    tri_size = Inches(0.45)
+    tri_x = box_x + (box_w - tri_size) / 2
+    tri_y = box_y + Inches(0.12)
+    tri_shape = slide.shapes.add_shape(
+        MSO_SHAPE.ISOSCELES_TRIANGLE,
+        int(tri_x), int(tri_y), int(tri_size), int(tri_size),
     )
+    tri_shape.fill.solid()
+    tri_shape.fill.fore_color.rgb = C_ORANGE
+    tri_shape.line.fill.background()
+    # Rotate: shape.rotation is clockwise degrees.
+    # angle=0 means north (no rotation), angle=180 means south (flip).
+    tri_shape.rotation = float(angle)
 
-    # Arrow character
+    # "N" label centered on the triangle
     add_textbox(
-        slide, box_x, box_y + Inches(0.20),
+        slide, box_x, box_y + Inches(0.18),
         box_w, Inches(0.25),
-        arrow,
-        font_name=FONT_BODY, font_size_pt=18,
-        font_color=C_ORANGE, bold=True, align=PP_ALIGN.CENTER,
+        "N",
+        font_name=FONT_BLACK, font_size_pt=13,
+        font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER,
     )
 
-    # Direction label at bottom
+    # Direction / angle label at bottom
+    label = _angle_label(angle)
     add_textbox(
-        slide, box_x, box_y + Inches(0.45),
-        box_w, Inches(0.18),
-        direction,
-        font_name=FONT_BODY, font_size_pt=8,
+        slide, box_x, box_y + Inches(0.62),
+        box_w, Inches(0.20),
+        label,
+        font_name=FONT_BODY, font_size_pt=9,
         font_color=C_SUB, align=PP_ALIGN.CENTER,
     )
