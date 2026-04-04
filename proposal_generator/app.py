@@ -1471,7 +1471,12 @@ with tab2:
                         with _ep1:
                             _contract_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="contract_kw")
                         with _ep2:
-                            _annual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="annual_kwh")
+                            _ipals_demand = st.session_state.get("ipals_data", {}).get("annual_demand_kwh", 0)
+                            _annual_kwh = st.number_input(
+                                "年間使用電力量 (kWh)", min_value=0, step=1000,
+                                value=_ipals_demand,
+                                key="annual_kwh",
+                            )
 
                         # Calculate annual cost
                         _basic_annual = float(_sel["basic"]) * _contract_kw * 12
@@ -1498,7 +1503,12 @@ with tab2:
                     _manual_rate = st.number_input("従量単価 (円/kWh)", min_value=0.0, step=0.5, key="manual_rate")
                 with _mc3:
                     _manual_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="manual_contract_kw")
-                _manual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="manual_annual_kwh")
+                _ipals_demand2 = st.session_state.get("ipals_data", {}).get("annual_demand_kwh", 0)
+                _manual_kwh = st.number_input(
+                    "年間使用電力量 (kWh)", min_value=0, step=1000,
+                    value=_ipals_demand2,
+                    key="manual_annual_kwh",
+                )
                 _basic_annual = _manual_basic * _manual_kw * 12
                 _usage_annual = _manual_rate * _manual_kwh
                 annual_elec_cost = int(_basic_annual + _usage_annual)
@@ -1583,6 +1593,8 @@ with tab2:
                         key="ppa_maint_per_kw",
                         help=f"デフォルト: {DEFAULT_MAINTENANCE_YEN_PER_KW:,.0f} 円/kW/年",
                     )
+                    _maint_annual = int(system_capacity * _maint_per_kw)
+                    st.caption(f"保守費 年額: ¥{_maint_annual:,.0f}（{system_capacity:.1f} kW × ¥{_maint_per_kw:,}）")
                     _security_type = st.radio(
                         "保安管理業務委託費",
                         ["自社 (¥120,000/年)", "先方負担 (¥0)", "他社委託 (金額入力)"],
@@ -1691,6 +1703,10 @@ with tab2:
                     insurance_yen_fixed=_insure_fixed + _om_additional,
                 )
                 st.session_state["ppa_calc_result"] = _result
+                # Auto-apply calculated price if not manually set
+                if _result.get("min_ppa_price") and not st.session_state.get("_ppa_price_manually_set"):
+                    st.session_state["_pending_ppa_price"] = float(_result["min_ppa_price"])
+                    st.rerun()
 
             _calc_res = st.session_state.get("ppa_calc_result")
             if _calc_res:
@@ -1731,6 +1747,7 @@ with tab2:
                     )
                     if st.button("この値を適用", key="apply_manual_ppa"):
                         st.session_state["_pending_ppa_price"] = _manual_ppa
+                        st.session_state["_ppa_price_manually_set"] = True
                         st.rerun()
 
                 # Cashflow table

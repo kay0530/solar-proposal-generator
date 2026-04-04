@@ -251,65 +251,123 @@ def _angle_label(angle: int) -> str:
 
 
 def _render_compass_indicator(slide, angle: int) -> None:
-    """Draw a rotatable compass indicator in the top-right corner.
+    """Draw a professional compass rose indicator in the top-right corner.
 
-    Uses a triangle (isosceles) shape as the north pointer, rotated by the
-    given angle. The shape.rotation property rotates clockwise in degrees,
-    matching compass bearing convention (0=N, 90=E, 180=S, 270=W).
-
-    The indicator shows:
-    - A bordered box background
-    - A rotated triangle pointing to "N" (north pointer rotated by angle)
-    - "N" text label
-    - Angle / direction label at bottom
+    Creates a grouped compass with:
+    - Circle with cross-hair lines (8 directions)
+    - North arrow pointing in the correct direction
+    - "真北" label on the arrow tip
+    - Angle label at bottom
     """
     from pptx.enum.shapes import MSO_SHAPE
-    from pptx.dml.color import RGBColor as _RGB
+    import math
 
-    box_w = Inches(0.75)
-    box_h = Inches(0.85)
+    box_w = Inches(1.1)
+    box_h = Inches(1.2)
     box_x = SLIDE_W - MARGIN - box_w
     box_y = CONTENT_TOP + Inches(0.05)
 
     # White background box with border
     add_rounded_rect(
         slide, box_x, box_y, box_w, box_h,
-        C_WHITE, radius_pt=4.0,
-        border_color=C_BORDER, border_pt=1.0,
+        C_WHITE, radius_pt=6.0,
+        border_color=C_BORDER, border_pt=0.75,
     )
 
-    # -- North pointer triangle (rotated) --
-    # The triangle is drawn pointing UP (north) and then rotated by `angle`.
-    # Center it within the box area.
-    tri_size = Inches(0.45)
-    tri_x = box_x + (box_w - tri_size) / 2
-    tri_y = box_y + Inches(0.12)
-    tri_shape = slide.shapes.add_shape(
+    # Center of compass within box
+    cx = box_x + box_w / 2
+    cy = box_y + Inches(0.52)
+    r_outer = Inches(0.32)  # outer circle radius
+    r_inner = Inches(0.05)  # inner dot radius
+
+    # Outer circle
+    oval = slide.shapes.add_shape(
+        MSO_SHAPE.OVAL,
+        int(cx - r_outer), int(cy - r_outer),
+        int(r_outer * 2), int(r_outer * 2),
+    )
+    oval.fill.background()
+    oval.line.color.rgb = RGBColor(0x66, 0x66, 0x66)
+    oval.line.width = Pt(0.75)
+
+    # Inner dot
+    dot = slide.shapes.add_shape(
+        MSO_SHAPE.OVAL,
+        int(cx - r_inner), int(cy - r_inner),
+        int(r_inner * 2), int(r_inner * 2),
+    )
+    dot.fill.solid()
+    dot.fill.fore_color.rgb = RGBColor(0x66, 0x66, 0x66)
+    dot.line.fill.background()
+
+    # Cross-hair lines (8 directions, rotated by angle)
+    for i in range(8):
+        dir_angle = angle + i * 45
+        rad = math.radians(dir_angle)
+        is_cardinal = (i % 2 == 0)
+        r_start = Inches(0.08) if is_cardinal else Inches(0.12)
+        r_end = r_outer - Inches(0.02)
+        line_w = Pt(1.0) if is_cardinal else Pt(0.5)
+
+        x1 = cx + r_start * math.sin(rad)
+        y1 = cy - r_start * math.cos(rad)
+        x2 = cx + r_end * math.sin(rad)
+        y2 = cy - r_end * math.cos(rad)
+
+        connector = slide.shapes.add_connector(
+            1,  # MSO_CONNECTOR_TYPE.STRAIGHT
+            int(x1), int(y1), int(x2), int(y2),
+        )
+        connector.line.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        connector.line.width = line_w
+
+    # North arrow (extending beyond circle)
+    rad_n = math.radians(angle)
+    arrow_len = Inches(0.48)
+
+    # Arrow line from center outward
+    ax1 = cx
+    ay1 = cy
+    ax2 = cx + arrow_len * math.sin(rad_n)
+    ay2 = cy - arrow_len * math.cos(rad_n)
+
+    arrow_line = slide.shapes.add_connector(
+        1, int(ax1), int(ay1), int(ax2), int(ay2),
+    )
+    arrow_line.line.color.rgb = C_ORANGE
+    arrow_line.line.width = Pt(2.0)
+
+    # North pointer triangle at arrow tip
+    tri_size = Inches(0.15)
+    tri_x = ax2 - tri_size / 2
+    tri_y = ay2 - tri_size
+    tri = slide.shapes.add_shape(
         MSO_SHAPE.ISOSCELES_TRIANGLE,
         int(tri_x), int(tri_y), int(tri_size), int(tri_size),
     )
-    tri_shape.fill.solid()
-    tri_shape.fill.fore_color.rgb = C_ORANGE
-    tri_shape.line.fill.background()
-    # Rotate: shape.rotation is clockwise degrees.
-    # angle=0 means north (no rotation), angle=180 means south (flip).
-    tri_shape.rotation = float(angle)
+    tri.fill.solid()
+    tri.fill.fore_color.rgb = C_ORANGE
+    tri.line.fill.background()
+    tri.rotation = float(angle)
 
-    # "N" label centered on the triangle
+    # "真北" label near arrow tip
+    label_offset = Inches(0.18)
+    lx = ax2 + label_offset * math.sin(rad_n) - Inches(0.2)
+    ly = ay2 - label_offset * math.cos(rad_n) - Inches(0.08)
     add_textbox(
-        slide, box_x, box_y + Inches(0.18),
-        box_w, Inches(0.25),
-        "N",
-        font_name=FONT_BLACK, font_size_pt=13,
-        font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER,
+        slide, int(lx), int(ly), Inches(0.4), Inches(0.16),
+        "真北",
+        font_name=FONT_BODY, font_size_pt=7,
+        font_color=RGBColor(0x33, 0x33, 0x33), bold=True,
+        align=PP_ALIGN.CENTER,
     )
 
-    # Direction / angle label at bottom
+    # Angle / direction label at bottom
     label = _angle_label(angle)
     add_textbox(
-        slide, box_x, box_y + Inches(0.62),
+        slide, box_x, box_y + Inches(0.95),
         box_w, Inches(0.20),
-        label,
-        font_name=FONT_BODY, font_size_pt=9,
+        f"角度 {angle}° ({label})",
+        font_name=FONT_BODY, font_size_pt=8,
         font_color=C_SUB, align=PP_ALIGN.CENTER,
     )
