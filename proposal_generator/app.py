@@ -195,6 +195,7 @@ def _parse_quote_excel(uploaded_file) -> dict:
                     "kwh": cap_f,
                     "qty": qty_i,
                     "price": ws2.cell(r, 9).value or 0,  # I = price
+                    "selling_price": ws2.cell(r, 17).value or 0,  # Q = selling price
                 })
         result["batteries"] = batteries
 
@@ -257,10 +258,14 @@ def _apply_quote_to_session(q: dict) -> None:
     if bats:
         st.session_state["battery_types"] = len(bats)
         st.session_state["bat_input_mode"] = "手動入力"
+        _bat_sell_total = 0
         for i, b in enumerate(bats):
             st.session_state[f"bat_model_{i}"] = f"{b['maker']} {b['model']}".strip()
             st.session_state[f"bat_manual_output_{i}"] = b["kwh"]
             st.session_state[f"bat_manual_count_{i}"] = b.get("qty", 1)
+            _bat_sell_total += b.get("selling_price", 0) or 0
+        if _bat_sell_total > 0:
+            st.session_state["battery_price_input"] = int(_bat_sell_total)
 
     # Pricing data
     st.session_state["_quote_kw_unit_cost"] = int(round(q.get("kw_unit_cost", 0)))
@@ -595,6 +600,129 @@ def _equipment_selector(
     return data_list, total_val, total_cnt
 
 # ---------------------------------------------------------------------------
+# Restore widget keys from saved JSON (selective update, preserves uploads)
+# ---------------------------------------------------------------------------
+
+def _restore_widget_keys(data: dict) -> None:
+    """Map saved customer_data fields back to widget session_state keys.
+
+    Only sets keys that exist in *data* so uploaded files, SF connection state,
+    and other runtime-only session entries are preserved.
+    """
+    # Direct widget key mappings: saved_key -> session_state widget key
+    _DIRECT = {
+        "kw_unit_cost": "kw_unit_cost_input",
+        "gross_margin_pct": "gross_margin_input",
+        "sales_commission_pct": "commission_input",
+        "ppa_unit_price": "ppa_price_input",
+        "subsidy_name": "subsidy_select",
+        "lease_company": "lease_company",
+        "lease_years": "lease_years_input",
+        "contract_kw": "contract_kw",
+        "annual_kwh": "annual_kwh",
+        "elec_company": "elec_company",
+        "elec_contract": "elec_contract",
+        "company_size": "company_size",
+        "estimate_number": "estimate_number_input",
+        "estimate_validity": "estimate_validity_input",
+        "estimate_delivery": "estimate_delivery_input",
+        "estimate_subsidy_note": "estimate_subsidy_note_input",
+        "estimate_frame_cost": "estimate_frame_cost_input",
+        "estimate_electrical_cost": "estimate_electrical_cost_input",
+        "fip_premium_yen_per_kwh": "fip_premium",
+        "fip_market_price": "fip_market_price",
+        "fip_balancing_rate": "fip_balancing_rate",
+    }
+    for src, dst in _DIRECT.items():
+        if src in data and data[src] is not None:
+            st.session_state[dst] = data[src]
+
+    # Restore quote-derived pricing keys so price section picks them up
+    if data.get("selling_price"):
+        st.session_state["_quote_selling_price"] = int(data["selling_price"])
+    if data.get("raw_cost"):
+        st.session_state["_quote_raw_cost"] = int(data["raw_cost"])
+    if data.get("gross_margin_pct"):
+        st.session_state["_quote_gross_margin_pct"] = round(data["gross_margin_pct"], 1)
+    if data.get("kw_unit_cost"):
+        st.session_state["_quote_kw_unit_cost"] = int(data["kw_unit_cost"])
+    if data.get("sales_commission_pct"):
+        st.session_state["_quote_commission_rate"] = round(data["sales_commission_pct"], 1)
+
+    # Restore iPals data if present
+    _ipals_keys = [
+        "annual_gen_kwh", "self_consumption_kwh", "self_consumption_pct",
+        "surplus_kwh", "co2_annual_t", "monthly_gen_kwh",
+    ]
+    _ipals = {}
+    for k in _ipals_keys:
+        if k in data and data[k] is not None:
+            _ipals[k] = data[k]
+    if _ipals:
+        # Also add demand if available
+        if "annual_demand_kwh" in data:
+            _ipals["annual_demand_kwh"] = data["annual_demand_kwh"]
+        st.session_state["ipals_data"] = _ipals
+
+    # Restore PPA calc result if present
+    if data.get("cashflow_table"):
+        st.session_state["ppa_calc_result"] = {
+            "annual_lease_payment": data.get("annual_lease_payment", 0),
+            "effective_rate_pct": data.get("ppa_effective_rate_pct", 0.0),
+            "annual_om_cost": data.get("annual_om_cost", 0),
+            "total_annual_cost": data.get("total_annual_cost", 0),
+            "min_ppa_price": data.get("min_ppa_price", 0),
+            "min_dscr": data.get("min_dscr"),
+            "principal": data.get("ppa_principal", 0),
+            "cashflow_table": data["cashflow_table"],
+        }
+
+    # Restore FIP calc result if present
+    if data.get("fip_net_revenue"):
+        st.session_state["fip_calc_result"] = {
+            "gross_revenue": data.get("fip_gross_revenue", 0),
+            "balancing_cost": data.get("fip_balancing_cost", 0),
+            "net_revenue": data.get("fip_net_revenue", 0),
+            "effective_rate": data.get("fip_effective_rate", 0),
+        }
+
+    # Restore equipment data into manual input widget keys
+    panels = data.get("panels", [])
+    if panels:
+        st.session_state["panel_types"] = len(panels)
+        st.session_state["panel_input_mode"] = "手動入力"
+        for i, p in enumerate(panels):
+            st.session_state[f"panel_model_{i}"] = f"{p.get('maker', '')} {p.get('model', '')}".strip()
+            st.session_state[f"panel_manual_output_{i}"] = p.get("watt_per_unit", 0)
+            st.session_state[f"panel_manual_count_{i}"] = p.get("count", 0)
+
+    pcs_list = data.get("pcs_list", [])
+    if pcs_list:
+        st.session_state["pcs_types"] = len(pcs_list)
+        st.session_state["pcs_input_mode"] = "手動入力"
+        for i, pc in enumerate(pcs_list):
+            st.session_state[f"pcs_model_{i}"] = f"{pc.get('maker', '')} {pc.get('model', '')}".strip()
+            st.session_state[f"pcs_manual_output_{i}"] = pc.get("kw_per_unit", 0)
+            st.session_state[f"pcs_manual_count_{i}"] = pc.get("count", 0)
+
+    bats = data.get("batteries", [])
+    if bats:
+        st.session_state["battery_types"] = len(bats)
+        st.session_state["bat_input_mode"] = "手動入力"
+        for i, b in enumerate(bats):
+            st.session_state[f"bat_model_{i}"] = f"{b.get('maker', '')} {b.get('model', '')}".strip()
+            st.session_state[f"bat_manual_output_{i}"] = b.get("kwh_per_unit", 0)
+            st.session_state[f"bat_manual_count_{i}"] = b.get("count", 0)
+
+    # Restore proposal type
+    ptype = data.get("proposal_type", "")
+    if ptype == "epc":
+        st.session_state["proposal_type"] = "EPC（販売）"
+    elif ptype == "ppa":
+        st.session_state["proposal_type"] = "PPA（第三者所有）"
+
+
+# ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
 
@@ -659,6 +787,7 @@ with tab1:
                     st.session_state["sf_company"] = _loaded.get("company_name", "")
                     st.session_state["sf_office"] = _loaded.get("office_name", "")
                     st.session_state["sf_address"] = _loaded.get("address", "")
+                    _restore_widget_keys(_loaded)
                     st.success(f"読み込みました: {_sel}")
                     st.rerun()
             else:
@@ -671,6 +800,7 @@ with tab1:
                 st.session_state["sf_company"] = _loaded.get("company_name", "")
                 st.session_state["sf_office"] = _loaded.get("office_name", "")
                 st.session_state["sf_address"] = _loaded.get("address", "")
+                _restore_widget_keys(_loaded)
                 st.success("アップロードしたデータを読み込みました")
                 st.rerun()
 
@@ -922,103 +1052,6 @@ with tab2:
     else:
         system_capacity = total_panel_kw
 
-    # ----- Contract Terms -----
-    with st.expander("📋 契約条件", expanded=True):
-        if is_epc:
-            ct_col1, ct_col2 = st.columns(2)
-            with ct_col1:
-                contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
-            with ct_col2:
-                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
-            ppa_unit_price = 0.0
-            surplus_price = 0.0
-        else:
-            ct_col1, ct_col2, ct_col3, ct_col4 = st.columns(4)
-            with ct_col1:
-                contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
-            with ct_col2:
-                ppa_unit_price = st.number_input(
-                    "PPA単価 (円/kWh)",
-                    min_value=0.0, step=0.5,
-                    key="ppa_price_input",
-                    help="下の「PPA単価自動試算」ボタンで自動入力できます",
-                )
-            with ct_col3:
-                surplus_price = st.number_input("余剰売電単価 (円/kWh)", min_value=0.0, step=0.5)
-            with ct_col4:
-                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
-
-        # ----- Current Electricity Cost (contract master based) -----
-        st.markdown("**現在の電気料金**")
-        _elec_master = load_electricity_master()
-        if _elec_master:
-            _companies = sorted(set(r["company"] for r in _elec_master))
-            _companies_with_manual = _companies + ["その他（新電力・手入力）"]
-            _elec_company = st.selectbox("電力会社", [""] + _companies_with_manual, key="elec_company")
-
-            if _elec_company and _elec_company != "その他（新電力・手入力）":
-                _contracts = [r for r in _elec_master if r["company"] == _elec_company]
-                _contract_names = [r["contract"] for r in _contracts]
-                _elec_contract = st.selectbox("契約種別", [""] + _contract_names, key="elec_contract")
-
-                if _elec_contract:
-                    _sel = next((r for r in _contracts if r["contract"] == _elec_contract), None)
-                    if _sel:
-                        _ec1, _ec2, _ec3 = st.columns(3)
-                        with _ec1:
-                            st.metric("基本料金", f"¥{_sel['basic']:,.1f}/kW")
-                        with _ec2:
-                            _avg_rate = _sel["summer"] or _sel["other"] or 0
-                            st.metric("夏季単価", f"¥{_sel['summer'] or 0:.2f}/kWh")
-                        with _ec3:
-                            st.metric("その他季単価", f"¥{_sel['other'] or 0:.2f}/kWh")
-
-                        _ep1, _ep2 = st.columns(2)
-                        with _ep1:
-                            _contract_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="contract_kw")
-                        with _ep2:
-                            _annual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="annual_kwh")
-
-                        # Calculate annual cost
-                        _basic_annual = float(_sel["basic"]) * _contract_kw * 12
-                        # Weighted average: summer 4 months, other 8 months
-                        _summer_rate = float(_sel["summer"] or _sel["other"] or 0)
-                        _other_rate = float(_sel["other"] or _sel["summer"] or 0)
-                        _avg_unit = (_summer_rate * 4 + _other_rate * 8) / 12
-                        _usage_annual = _avg_unit * _annual_kwh
-                        annual_elec_cost = int(_basic_annual + _usage_annual)
-                        st.caption(
-                            f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**　"
-                            f"（基本: ¥{_basic_annual:,.0f} + 従量: ¥{_usage_annual:,.0f}　"
-                            f"加重平均単価: ¥{_avg_unit:.2f}/kWh）"
-                        )
-                    else:
-                        annual_elec_cost = 0
-                else:
-                    annual_elec_cost = 0
-            elif _elec_company == "その他（新電力・手入力）":
-                _mc1, _mc2, _mc3 = st.columns(3)
-                with _mc1:
-                    _manual_basic = st.number_input("基本料金 (円/kW)", min_value=0.0, step=100.0, key="manual_basic")
-                with _mc2:
-                    _manual_rate = st.number_input("従量単価 (円/kWh)", min_value=0.0, step=0.5, key="manual_rate")
-                with _mc3:
-                    _manual_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="manual_contract_kw")
-                _manual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="manual_annual_kwh")
-                _basic_annual = _manual_basic * _manual_kw * 12
-                _usage_annual = _manual_rate * _manual_kwh
-                annual_elec_cost = int(_basic_annual + _usage_annual)
-                if annual_elec_cost > 0:
-                    st.caption(f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**")
-            else:
-                annual_elec_cost = 0
-        else:
-            st.caption("⚠️ 契約電力マスタを読み込めません（Excelファイル未設定）")
-            annual_elec_cost = st.number_input(
-                "現在の年間電気代 (円)", min_value=0, step=100000, value=0,
-                help="PP7・PP8の電気代削減額試算に使用します",
-            )
-
     # ----- Pricing -----
     with st.expander("💰 価格情報", expanded=False):
 
@@ -1192,36 +1225,63 @@ with tab2:
                 subsidy_amount = 0
                 st.info("パネル・PCS情報を入力すると自動試算します")
 
-    # ----- Lease (PPA only) -----
-    if not is_epc:
-        with st.expander("📋 リース情報", expanded=False):
-            _lease_companies = [
-                "シーエナジー",
-                "みずほリース",
-                "NTTファイナンス",
-                "オリックス",
-                "三井住友ファイナンス&リース",
-                "その他",
-            ]
-            lease_company = st.selectbox("リース会社", _lease_companies, key="lease_company")
+    # ----- Layout image & Load calculation upload -----
+    with st.expander("📐 設備レイアウト・積載荷重", expanded=False):
+        st.caption("PP5 / EP3 スライドに使用します")
 
-            # Show fixed-rate notice for known companies
-            from proposal_generator.ppa_calc import LEASE_RATE_MAP
-            _known_rate = LEASE_RATE_MAP.get(lease_company)
-            if _known_rate is not None:
-                st.info(
-                    f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%**"
-                    + (" (CE IRR目標)" if lease_company == "シーエナジー" else " (固定)")
-                )
-                lease_rate = _known_rate * 100  # store as % for display
+        _layout_col1, _layout_col2 = st.columns(2)
+
+        with _layout_col1:
+            st.markdown("**レイアウト画像**")
+            _layout_img = st.file_uploader(
+                "屋根レイアウト画像をアップロード",
+                type=["png", "jpg", "jpeg", "bmp", "gif"],
+                key="layout_image_file",
+                help="屋根配置図のスクリーンショットや画像ファイル",
+            )
+            if _layout_img is not None:
+                st.image(_layout_img, caption="レイアウト画像プレビュー", use_container_width=True)
+                # Save to temp file for PPTX generation
+                import tempfile as _tmp_layout
+                _ext = Path(_layout_img.name).suffix or ".png"
+                _tmp_path = Path(_tmp_layout.mktemp(suffix=_ext))
+                _tmp_path.write_bytes(_layout_img.getvalue())
+                st.session_state["layout_image_path"] = str(_tmp_path)
             else:
-                lease_rate = st.number_input("リース金利 (%)", min_value=0.0, step=0.1, value=6.0, key="lease_rate_input")
+                st.session_state.pop("layout_image_path", None)
 
-            lease_years = st.number_input("リース期間 (年)", min_value=1, max_value=30, value=20, key="lease_years_input")
-    else:
-        lease_company = ""
-        lease_rate = 0.0
-        lease_years = 0
+            # Compass direction selector
+            st.selectbox(
+                "方位",
+                options=["北", "北東", "東", "南東", "南", "南西", "西", "北西"],
+                index=4,  # Default: 南
+                key="compass_direction",
+                help="パネル設置面の方位（レイアウト画像上に方位マークを表示します）",
+            )
+
+        with _layout_col2:
+            st.markdown("**積載荷重計算表**")
+            _load_calc_file = st.file_uploader(
+                "積載荷重計算表Excelをアップロード",
+                type=["xlsx", "xlsm", "xls"],
+                key="load_calc_file",
+                help="積載荷重計算表Excel（まとめシートから読み込みます）",
+            )
+            if _load_calc_file is not None:
+                try:
+                    from proposal_generator.load_calc import parse_load_calc_excel
+                    _lc = parse_load_calc_excel(_load_calc_file)
+                    st.session_state["load_calc_data"] = _lc
+                    st.success(
+                        f"読み込み完了: 総重量 {_lc.get('total_weight_kg', 0):,.0f}kg / "
+                        f"積載荷重 {_lc.get('load_per_roof_area', 0):.2f}kg/m²"
+                    )
+                    with st.expander("読み込み内容を確認", expanded=False):
+                        st.json(_lc)
+                except Exception as e:
+                    st.error(f"読み込みエラー: {e}")
+            else:
+                st.session_state.pop("load_calc_data", None)
 
     # ----- iPals upload -----
     with st.expander("📊 iPals発電シミュレーション", expanded=False):
@@ -1300,63 +1360,133 @@ with tab2:
             else:
                 st.error("CSVのパースに失敗しました。iPals出力形式を確認してください。")
 
-    # ----- Layout image & Load calculation upload -----
-    with st.expander("📐 設備レイアウト・積載荷重", expanded=False):
-        st.caption("PP5 / EP3 スライドに使用します")
+    # ----- Contract Terms -----
+    with st.expander("📋 契約条件", expanded=True):
+        if is_epc:
+            ct_col1, ct_col2 = st.columns(2)
+            with ct_col1:
+                contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
+            with ct_col2:
+                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
+            ppa_unit_price = 0.0
+            surplus_price = 0.0
+        else:
+            ct_col1, ct_col2, ct_col3, ct_col4 = st.columns(4)
+            with ct_col1:
+                contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
+            with ct_col2:
+                ppa_unit_price = st.number_input(
+                    "PPA単価 (円/kWh)",
+                    min_value=0.0, step=0.5,
+                    key="ppa_price_input",
+                    help="下の「PPA単価自動試算」ボタンで自動入力できます",
+                )
+            with ct_col3:
+                surplus_price = st.number_input("余剰売電単価 (円/kWh)", min_value=0.0, step=0.5)
+            with ct_col4:
+                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
 
-        _layout_col1, _layout_col2 = st.columns(2)
+        # ----- Current Electricity Cost (contract master based) -----
+        st.markdown("**現在の電気料金**")
+        _elec_master = load_electricity_master()
+        if _elec_master:
+            _companies = sorted(set(r["company"] for r in _elec_master))
+            _companies_with_manual = _companies + ["その他（新電力・手入力）"]
+            _elec_company = st.selectbox("電力会社", [""] + _companies_with_manual, key="elec_company")
 
-        with _layout_col1:
-            st.markdown("**レイアウト画像**")
-            _layout_img = st.file_uploader(
-                "屋根レイアウト画像をアップロード",
-                type=["png", "jpg", "jpeg", "bmp", "gif"],
-                key="layout_image_file",
-                help="屋根配置図のスクリーンショットや画像ファイル",
-            )
-            if _layout_img is not None:
-                st.image(_layout_img, caption="レイアウト画像プレビュー", use_container_width=True)
-                # Save to temp file for PPTX generation
-                import tempfile as _tmp_layout
-                _ext = Path(_layout_img.name).suffix or ".png"
-                _tmp_path = Path(_tmp_layout.mktemp(suffix=_ext))
-                _tmp_path.write_bytes(_layout_img.getvalue())
-                st.session_state["layout_image_path"] = str(_tmp_path)
+            if _elec_company and _elec_company != "その他（新電力・手入力）":
+                _contracts = [r for r in _elec_master if r["company"] == _elec_company]
+                _contract_names = [r["contract"] for r in _contracts]
+                _elec_contract = st.selectbox("契約種別", [""] + _contract_names, key="elec_contract")
+
+                if _elec_contract:
+                    _sel = next((r for r in _contracts if r["contract"] == _elec_contract), None)
+                    if _sel:
+                        _ec1, _ec2, _ec3 = st.columns(3)
+                        with _ec1:
+                            st.metric("基本料金", f"¥{_sel['basic']:,.1f}/kW")
+                        with _ec2:
+                            _avg_rate = _sel["summer"] or _sel["other"] or 0
+                            st.metric("夏季単価", f"¥{_sel['summer'] or 0:.2f}/kWh")
+                        with _ec3:
+                            st.metric("その他季単価", f"¥{_sel['other'] or 0:.2f}/kWh")
+
+                        _ep1, _ep2 = st.columns(2)
+                        with _ep1:
+                            _contract_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="contract_kw")
+                        with _ep2:
+                            _annual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="annual_kwh")
+
+                        # Calculate annual cost
+                        _basic_annual = float(_sel["basic"]) * _contract_kw * 12
+                        # Weighted average: summer 4 months, other 8 months
+                        _summer_rate = float(_sel["summer"] or _sel["other"] or 0)
+                        _other_rate = float(_sel["other"] or _sel["summer"] or 0)
+                        _avg_unit = (_summer_rate * 4 + _other_rate * 8) / 12
+                        _usage_annual = _avg_unit * _annual_kwh
+                        annual_elec_cost = int(_basic_annual + _usage_annual)
+                        st.caption(
+                            f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**　"
+                            f"（基本: ¥{_basic_annual:,.0f} + 従量: ¥{_usage_annual:,.0f}　"
+                            f"加重平均単価: ¥{_avg_unit:.2f}/kWh）"
+                        )
+                    else:
+                        annual_elec_cost = 0
+                else:
+                    annual_elec_cost = 0
+            elif _elec_company == "その他（新電力・手入力）":
+                _mc1, _mc2, _mc3 = st.columns(3)
+                with _mc1:
+                    _manual_basic = st.number_input("基本料金 (円/kW)", min_value=0.0, step=100.0, key="manual_basic")
+                with _mc2:
+                    _manual_rate = st.number_input("従量単価 (円/kWh)", min_value=0.0, step=0.5, key="manual_rate")
+                with _mc3:
+                    _manual_kw = st.number_input("契約電力 (kW)", min_value=0.0, step=1.0, key="manual_contract_kw")
+                _manual_kwh = st.number_input("年間使用電力量 (kWh)", min_value=0, step=1000, key="manual_annual_kwh")
+                _basic_annual = _manual_basic * _manual_kw * 12
+                _usage_annual = _manual_rate * _manual_kwh
+                annual_elec_cost = int(_basic_annual + _usage_annual)
+                if annual_elec_cost > 0:
+                    st.caption(f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**")
             else:
-                st.session_state.pop("layout_image_path", None)
-
-            # Compass direction selector
-            st.selectbox(
-                "方位",
-                options=["北", "北東", "東", "南東", "南", "南西", "西", "北西"],
-                index=4,  # Default: 南
-                key="compass_direction",
-                help="パネル設置面の方位（レイアウト画像上に方位マークを表示します）",
+                annual_elec_cost = 0
+        else:
+            st.caption("⚠️ 契約電力マスタを読み込めません（Excelファイル未設定）")
+            annual_elec_cost = st.number_input(
+                "現在の年間電気代 (円)", min_value=0, step=100000, value=0,
+                help="PP7・PP8の電気代削減額試算に使用します",
             )
 
-        with _layout_col2:
-            st.markdown("**積載荷重計算表**")
-            _load_calc_file = st.file_uploader(
-                "積載荷重計算表Excelをアップロード",
-                type=["xlsx", "xlsm", "xls"],
-                key="load_calc_file",
-                help="積載荷重計算表Excel（まとめシートから読み込みます）",
-            )
-            if _load_calc_file is not None:
-                try:
-                    from proposal_generator.load_calc import parse_load_calc_excel
-                    _lc = parse_load_calc_excel(_load_calc_file)
-                    st.session_state["load_calc_data"] = _lc
-                    st.success(
-                        f"読み込み完了: 総重量 {_lc.get('total_weight_kg', 0):,.0f}kg / "
-                        f"積載荷重 {_lc.get('load_per_roof_area', 0):.2f}kg/m²"
-                    )
-                    with st.expander("読み込み内容を確認", expanded=False):
-                        st.json(_lc)
-                except Exception as e:
-                    st.error(f"読み込みエラー: {e}")
+    # ----- Lease (PPA only) -----
+    if not is_epc:
+        with st.expander("📋 リース情報", expanded=False):
+            _lease_companies = [
+                "シーエナジー",
+                "みずほリース",
+                "NTTファイナンス",
+                "オリックス",
+                "三井住友ファイナンス&リース",
+                "その他",
+            ]
+            lease_company = st.selectbox("リース会社", _lease_companies, key="lease_company")
+
+            # Show fixed-rate notice for known companies
+            from proposal_generator.ppa_calc import LEASE_RATE_MAP
+            _known_rate = LEASE_RATE_MAP.get(lease_company)
+            if _known_rate is not None:
+                st.info(
+                    f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%**"
+                    + (" (CE IRR目標)" if lease_company == "シーエナジー" else " (固定)")
+                )
+                lease_rate = _known_rate * 100  # store as % for display
             else:
-                st.session_state.pop("load_calc_data", None)
+                lease_rate = st.number_input("リース金利 (%)", min_value=0.0, step=0.1, value=6.0, key="lease_rate_input")
+
+            lease_years = st.number_input("リース期間 (年)", min_value=1, max_value=30, value=20, key="lease_years_input")
+    else:
+        lease_company = ""
+        lease_rate = 0.0
+        lease_years = 0
 
     # ----- PPA Unit Price Auto-Calculation (PPA only) -----
     if not is_epc:
