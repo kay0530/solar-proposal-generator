@@ -266,6 +266,7 @@ def _apply_quote_to_session(q: dict) -> None:
             _bat_sell_total += b.get("selling_price", 0) or 0
         if _bat_sell_total > 0:
             st.session_state["battery_price_input"] = int(_bat_sell_total)
+            st.session_state["_quote_battery_selling_price"] = int(_bat_sell_total)
 
     # Pricing data
     st.session_state["_quote_kw_unit_cost"] = int(round(q.get("kw_unit_cost", 0)))
@@ -1171,10 +1172,12 @@ with tab2:
         if total_panel_kw > 0 and total_pcs_kw > 0 and _sub_sel not in ("なし", "手動入力"):
             from proposal_generator.subsidy_calc import calc_all_subsidies
 
+            _bat_price_default = st.session_state.get("_quote_battery_selling_price", 0)
             _bat_price = st.number_input(
-                "蓄電池販売価格 (円)", min_value=0, step=100000, value=0,
+                "蓄電池販売価格 (円)", min_value=0, step=100000,
+                value=_bat_price_default,
                 key="battery_price_input",
-                help="蓄電池の販売価格（補助金計算に使用）",
+                help="蓄電池の販売価格（補助金計算に使用）。見積書読込時は自動入力されます",
             )
 
             _all = calc_all_subsidies(
