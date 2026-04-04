@@ -922,10 +922,13 @@ with tab1:
                     if _deal_name != _prev_box_deal:
                         try:
                             from proposal_generator.box_client import search_deal_folders, find_proposal_folder, list_files
-                            _candidates = search_deal_folders(_deal_name)
+                            # Strip SF prefixes (㊛㊚★●◆ etc.) and search with clean name
+                            _clean_name = _re.sub(r'^[㊛㊚★●◆◇■□▲△▼▽○◎☆※♦♢\s]+', '', _deal_name).strip()
+                            _candidates = search_deal_folders(_clean_name)
                             st.session_state["_box_auto_deal"] = _deal_name
-                            # Exact match preferred
-                            _exact = next((c for c in _candidates if c["name"] == _deal_name), None)
+                            st.session_state["box_candidates"] = _candidates
+                            # Exact match on clean name preferred
+                            _exact = next((c for c in _candidates if c["name"] == _clean_name), None)
                             _match = _exact or (_candidates[0] if len(_candidates) == 1 else None)
                             if _match:
                                 _pid = find_proposal_folder(_match["id"])
@@ -935,12 +938,26 @@ with tab1:
                                 st.session_state["box_file_list"] = _files
                                 st.success(f"📦 Box連携: {_match['name']} → 03_提案資料 ({len(_files)} ファイル)")
                             elif len(_candidates) > 1:
-                                st.session_state["box_candidates"] = _candidates
-                                st.info(f"📦 Box: {len(_candidates)}件の候補あり — 下のBox連携セクションで選択してください")
+                                st.info(f"📦 Box: {len(_candidates)}件の候補あり — 下から選択してください")
                             else:
-                                st.caption(f"📦 Box: 「{_deal_name}」のフォルダが見つかりません")
+                                st.caption(f"📦 Box: 「{_clean_name}」のフォルダが見つかりません")
                         except Exception:
                             pass
+
+                # Show Box candidate selector if multiple matches
+                _box_cands = st.session_state.get("box_candidates", [])
+                if len(_box_cands) > 1 and not st.session_state.get("box_proposal_folder_id"):
+                    from proposal_generator.box_client import find_proposal_folder, list_files
+                    _opts = ["選択してください"] + [c["name"] for c in _box_cands]
+                    _chosen = st.selectbox("📦 Box商談フォルダを選択", _opts, key="box_auto_select")
+                    if _chosen != "選択してください":
+                        _match = next(c for c in _box_cands if c["name"] == _chosen)
+                        _pid = find_proposal_folder(_match["id"])
+                        _fid = _pid or _match["id"]
+                        st.session_state["box_proposal_folder_id"] = _fid
+                        _files = list_files(_fid) if _pid else []
+                        st.session_state["box_file_list"] = _files
+                        st.success(f"📦 {_chosen} → 03_提案資料 ({len(_files)} ファイル)")
             else:
                 st.info("該当する商談が見つかりませんでした")
 
