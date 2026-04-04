@@ -157,19 +157,52 @@ def search_deal_folder(deal_name: str) -> Optional[dict]:
     """Search for a deal folder under 案件進捗 by name.
 
     Returns {"id": str, "name": str} or None.
+    Uses Box search API first, then falls back to listing folder items
+    (search API can miss results with Japanese/full-width characters).
     """
-    params = {
-        "query": deal_name,
-        "type": "folder",
-        "ancestor_folder_ids": DEALS_FOLDER_ID,
-        "limit": 10,
-    }
-    resp = _request("GET", f"{BOX_API_BASE}/search", params=params)
-    resp.raise_for_status()
-    entries = resp.json().get("entries", [])
-    for entry in entries:
-        if entry.get("type") == "folder" and deal_name in entry.get("name", ""):
-            return {"id": entry["id"], "name": entry["name"]}
+    # Strategy 1: Box search API
+    try:
+        # Strip parenthetical suffix for better search hit rate
+        import re
+        search_term = re.split(r'[（(]', deal_name)[0].strip()
+        params = {
+            "query": search_term,
+            "type": "folder",
+            "ancestor_folder_ids": DEALS_FOLDER_ID,
+            "limit": 20,
+        }
+        resp = _request("GET", f"{BOX_API_BASE}/search", params=params)
+        if resp.status_code == 200:
+            for entry in resp.json().get("entries", []):
+                if entry.get("type") == "folder" and deal_name in entry.get("name", ""):
+                    return {"id": entry["id"], "name": entry["name"]}
+                # Also match if search_term is in the folder name
+                if entry.get("type") == "folder" and search_term in entry.get("name", ""):
+                    return {"id": entry["id"], "name": entry["name"]}
+    except Exception:
+        pass
+
+    # Strategy 2: List items in 案件進捗 and match by name
+    offset = 0
+    while True:
+        params = {"fields": "id,name,type", "limit": 200, "offset": offset}
+        resp = _request(
+            "GET",
+            f"{BOX_API_BASE}/folders/{DEALS_FOLDER_ID}/items",
+            params=params,
+        )
+        if resp.status_code != 200:
+            break
+        entries = resp.json().get("entries", [])
+        if not entries:
+            break
+        for entry in entries:
+            if entry.get("type") == "folder" and deal_name in entry.get("name", ""):
+                return {"id": entry["id"], "name": entry["name"]}
+        offset += len(entries)
+        if len(entries) < 200:
+            break
+
     return None
 
 
