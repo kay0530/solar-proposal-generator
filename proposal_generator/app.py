@@ -951,8 +951,14 @@ with tab1:
                     try:
                         from proposal_generator.box_client import upload_file as _box_upload
                         _cdata = st.session_state["customer_data"]
-                        _company = _cdata.get("company_name", "unknown")
-                        _ptype = _cdata.get("proposal_type", "ppa")
+                        _company = (
+                            _cdata.get("office_name")
+                            or _cdata.get("company_name")
+                            or st.session_state.get("sf_office")
+                            or st.session_state.get("sf_company")
+                            or "unknown"
+                        )
+                        _ptype = _cdata.get("proposal_type", "ppa").upper()
                         _date = _cdata.get("proposal_date", "")
                         _fname = f"{_company}_{_ptype}_{_date}.json"
                         _fname = _re.sub(r'[\\/*?:"<>|]', '_', _fname)
