@@ -756,10 +756,40 @@ def _restore_widget_keys(data: dict) -> None:
 # Header
 # ---------------------------------------------------------------------------
 
-if LOGO_PATH.exists():
-    st.image(str(LOGO_PATH), width=180)
-st.title("PPA/EPC 提案資料ジェネレーター")
-st.caption("変数を入力してスライド構成を選択し、PPTX を生成します")
+_hdr_left, _hdr_right = st.columns([3, 1])
+with _hdr_left:
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=180)
+    st.title("PPA/EPC 提案資料ジェネレーター")
+    st.caption("変数を入力してスライド構成を選択し、PPTX を生成します")
+with _hdr_right:
+    st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
+    if st.button("💾 現在のデータを保存", key="quick_save", use_container_width=True):
+        _cdata = st.session_state.get("customer_data", {})
+        if _cdata and _cdata.get("company_name"):
+            _company = _cdata.get("company_name", "unknown")
+            _ptype = _cdata.get("proposal_type", "ppa")
+            _date = _cdata.get("proposal_date", "")
+            _fname = f"{_company}_{_ptype}_{_date}.json"
+            _fname = _re.sub(r'[\\/*?:"<>|]', '_', _fname)
+            _fpath = SAVE_DIR / _fname
+            with open(_fpath, "w", encoding="utf-8") as _f:
+                json.dump(_cdata, _f, ensure_ascii=False, indent=2, default=str)
+            st.success(f"保存: {_fname}")
+        else:
+            st.warning("顧客情報を先に入力してください")
+    if st.session_state.get("customer_data"):
+        _dl_json = json.dumps(
+            st.session_state["customer_data"],
+            ensure_ascii=False, indent=2, default=str,
+        )
+        st.download_button(
+            "📥 JSON DL",
+            data=_dl_json,
+            file_name=f"case_{st.session_state.get('customer_data', {}).get('company_name', 'data')}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "① 顧客情報",
