@@ -766,16 +766,32 @@ with _hdr_right:
     st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
     if st.button("💾 現在のデータを保存", key="quick_save", use_container_width=True):
         _cdata = st.session_state.get("customer_data", {})
-        if _cdata and _cdata.get("company_name"):
-            _company = _cdata.get("company_name", "unknown")
+        if _cdata and (_cdata.get("company_name") or _cdata.get("office_name")):
+            _company = (
+                _cdata.get("office_name")
+                or _cdata.get("company_name")
+                or "unknown"
+            )
             _ptype = _cdata.get("proposal_type", "ppa")
             _date = _cdata.get("proposal_date", "")
             _fname = f"{_company}_{_ptype}_{_date}.json"
             _fname = _re.sub(r'[\\/*?:"<>|]', '_', _fname)
+            # Local save
             _fpath = SAVE_DIR / _fname
             with open(_fpath, "w", encoding="utf-8") as _f:
                 json.dump(_cdata, _f, ensure_ascii=False, indent=2, default=str)
-            st.success(f"保存: {_fname}")
+            # Box save (if folder selected)
+            _box_fid = st.session_state.get("box_proposal_folder_id")
+            if _box_fid:
+                try:
+                    from proposal_generator.box_client import upload_file as _box_up
+                    _box_result = _box_up(_box_fid, _fpath, _fname)
+                    st.success(f"保存: {_fname}（Box + ローカル）")
+                except Exception as _be:
+                    st.success(f"保存: {_fname}（ローカル）")
+                    st.warning(f"Box保存失敗: {_be}")
+            else:
+                st.success(f"保存: {_fname}")
         else:
             st.warning("顧客情報を先に入力してください")
     if st.session_state.get("customer_data"):
