@@ -343,13 +343,14 @@ def calc_min_ppa_price(
     fire_insurance_annual: int = 0,
     depreciation_tax_schedule: list[int] | None = None,
 ) -> float:
-    """Calculate minimum PPA unit price to achieve target_dscr in all years.
+    """Calculate minimum PPA unit price so that average DSCR over the
+    lease/loan term >= target_dscr.
 
-    For lease: DSCR = Revenue / (Lease Payment + O&M)
-      - Worst year is always the final year (fixed cost, declining generation)
+    Average DSCR = (1/n) * Σ (Revenue_y / Cost_y)
 
-    For bank loan: DSCR = Revenue / (Loan Payment + O&M + Insurance + DepreciationTax)
-      - Must check ALL years since costs decline but generation also declines
+    Since Revenue_y = PPA_price * SC_y + surplus_revenue_y, we solve for
+    PPA_price analytically:
+        PPA_price = (target_dscr - avg_surplus_dscr) / ((1/n) * Σ (SC_y / Cost_y))
 
     Args:
         self_consumption_y1_kwh: Year-1 self-consumption (kWh)
@@ -358,7 +359,7 @@ def calc_min_ppa_price(
         lease_years:             Finance term
         fit_price:               FIT price for surplus (yen/kWh)
         include_surplus:         Whether to include surplus revenue
-        target_dscr:             Minimum acceptable DSCR
+        target_dscr:             Target average DSCR
         degradation:             Annual degradation rate (0.005 = 0.5%)
         annual_om_cost:          Annual O&M cost (yen) -- added to denominator
         finance_type:            FINANCE_TYPE_LEASE or FINANCE_TYPE_LOAN
@@ -369,65 +370,47 @@ def calc_min_ppa_price(
     Returns:
         Minimum PPA unit price (yen/kWh), rounded up to nearest 0.5 yen
     """
-    if self_consumption_y1_kwh <= 0 or annual_lease_payment <= 0:
-        # For bank loan, check loan schedule instead
+    if self_consumption_y1_kwh <= 0:
+        return 0.0
+    if annual_lease_payment <= 0 and not (finance_type == FINANCE_TYPE_LOAN and loan_payment_schedule):
+        return 0.0
+
+    dep_schedule = depreciation_tax_schedule or [0] * lease_years
+    sum_sc_over_cost = 0.0
+    sum_surplus_dscr = 0.0
+
+    for year in range(1, lease_years + 1):
+        decay = (1 - degradation) ** (year - 1)
+        sc = self_consumption_y1_kwh * decay
+        sur = surplus_y1_kwh * decay if include_surplus else 0.0
+
         if finance_type == FINANCE_TYPE_LOAN and loan_payment_schedule:
-            pass  # proceed with loan schedule
-        elif self_consumption_y1_kwh <= 0:
-            return 0.0
-        else:
-            return 0.0
-
-    if finance_type == FINANCE_TYPE_LOAN and loan_payment_schedule:
-        # Bank loan: check every year to find worst DSCR scenario
-        dep_schedule = depreciation_tax_schedule or [0] * lease_years
-        max_required_price = 0.0
-
-        for year in range(1, lease_years + 1):
-            decay = (1 - degradation) ** (year - 1)
-            sc = self_consumption_y1_kwh * decay
-            sur = surplus_y1_kwh * decay if include_surplus else 0.0
-
-            # Year's total cost
             loan_pay = loan_payment_schedule[year - 1]["total"] if year <= len(loan_payment_schedule) else 0
             dep_tax = dep_schedule[year - 1] if year <= len(dep_schedule) else 0
             total_cost = loan_pay + annual_om_cost + fire_insurance_annual + dep_tax
+        else:
+            total_cost = annual_lease_payment + annual_om_cost
 
-            required_revenue = total_cost * target_dscr
-            surplus_revenue = sur * fit_price
-            required_ppa_revenue = required_revenue - surplus_revenue
+        if total_cost <= 0:
+            continue
 
-            if required_ppa_revenue <= 0 or sc <= 0:
-                continue
+        sum_sc_over_cost += sc / total_cost
+        sum_surplus_dscr += (sur * fit_price) / total_cost
 
-            price_this_year = required_ppa_revenue / sc
-            if price_this_year > max_required_price:
-                max_required_price = price_this_year
+    n = lease_years
+    if sum_sc_over_cost <= 0:
+        return 0.0
 
-        if max_required_price <= 0:
-            return 0.0
+    avg_surplus_dscr = sum_surplus_dscr / n
+    avg_sc_over_cost = sum_sc_over_cost / n
 
-        # Round up to nearest 0.5 yen
-        return math.ceil(max_required_price * 2) / 2
+    raw_price = (target_dscr - avg_surplus_dscr) / avg_sc_over_cost
 
-    else:
-        # Lease: worst year is final year (fixed cost, declining generation)
-        decay = (1 - degradation) ** (lease_years - 1)
-        min_self_consume = self_consumption_y1_kwh * decay
-        min_surplus = surplus_y1_kwh * decay if include_surplus else 0.0
+    if raw_price <= 0:
+        return 0.0
 
-        total_cost = annual_lease_payment + annual_om_cost
-        required_revenue = total_cost * target_dscr
-        surplus_revenue = min_surplus * fit_price
-        required_ppa_revenue = required_revenue - surplus_revenue
-
-        if required_ppa_revenue <= 0:
-            return 0.0
-
-        raw_price = required_ppa_revenue / min_self_consume
-
-        # Round up to nearest 0.5 yen
-        return math.ceil(raw_price * 2) / 2
+    # Round up to nearest 0.5 yen
+    return math.ceil(raw_price * 2) / 2
 
 
 def calc_cashflow_table(
