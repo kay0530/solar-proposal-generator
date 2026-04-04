@@ -41,12 +41,15 @@ FINANCE_TYPE_MAP: dict[str, str] = {
     "群馬銀行": FINANCE_TYPE_LOAN,
 }
 
-# Default rates per company (replaces old LEASE_RATE_MAP)
+# Default rates per company
+# シーエナジー: rate is goal-seeked from CE_TARGET_IRR (not a fixed rate)
 DEFAULT_RATE_MAP: dict[str, float] = {
-    "シーエナジー": 0.0630,   # CE lease rate 6.30% (CE IRR target = 3.10%)
     "みずほリース": 0.0550,   # Fixed 5.5%
     "群馬銀行": 0.0180,       # Bank loan 1.8%
 }
+
+# CE (シーエナジー) target IRR — lease rate is calculated to achieve this
+CE_TARGET_IRR = 0.0310  # 3.10%
 
 # Keep backward compatibility alias
 LEASE_RATE_MAP = DEFAULT_RATE_MAP
@@ -115,6 +118,72 @@ def irr(cashflows: list[float], guess: float = 0.05, tol: float = 1e-7, max_iter
             return r_new
         r = r_new
     return r
+
+
+def _goal_seek_ce_rate(
+    principal: float,
+    lease_years: int,
+    contract_years: int,
+    self_consumption_y1_kwh: float,
+    surplus_y1_kwh: float,
+    fit_price: float,
+    include_surplus: bool,
+    target_dscr: float,
+    system_kw: float,
+    maintenance_yen_per_kw: float,
+    insurance_yen_fixed: float,
+    target_irr: float = CE_TARGET_IRR,
+) -> float:
+    """Goal-seek lease rate for シーエナジー to achieve target IRR.
+
+    Binary search for the lease rate where the resulting IRR (from
+    DSCR-constrained PPA pricing) equals the target IRR.
+    """
+    om_cost = calc_annual_om_cost(system_kw, maintenance_yen_per_kw, insurance_yen_fixed)
+
+    def _irr_at_rate(rate: float) -> float:
+        ap = pmt(rate, lease_years, principal)
+        mp = calc_min_ppa_price(
+            self_consumption_y1_kwh=self_consumption_y1_kwh,
+            surplus_y1_kwh=surplus_y1_kwh,
+            annual_lease_payment=ap,
+            lease_years=lease_years,
+            fit_price=fit_price,
+            include_surplus=include_surplus,
+            target_dscr=target_dscr,
+            annual_om_cost=om_cost,
+        )
+        cft = calc_cashflow_table(
+            self_consumption_y1_kwh=self_consumption_y1_kwh,
+            surplus_y1_kwh=surplus_y1_kwh,
+            ppa_unit_price=mp,
+            fit_price=fit_price,
+            annual_lease_payment=ap,
+            contract_years=contract_years,
+            lease_years=lease_years,
+            include_surplus=include_surplus,
+            annual_om_cost=om_cost,
+            company="シーエナジー",
+        )
+        cf_for_irr = [-principal] + [r["net_cashflow"] for r in cft]
+        try:
+            return irr(cf_for_irr)
+        except (ZeroDivisionError, ValueError, OverflowError):
+            return 0.0
+
+    # Binary search: rate in [1%, 15%]
+    lo, hi = 0.01, 0.15
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        mid_irr = _irr_at_rate(mid)
+        if mid_irr > target_irr:
+            lo = mid  # rate too low → IRR too high → increase rate
+        else:
+            hi = mid
+        if abs(mid_irr - target_irr) < 0.0001:
+            break
+
+    return round((lo + hi) / 2, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -551,7 +620,26 @@ def auto_calc_ppa(
     if self_consumption_y1_kwh <= 0:
         warnings_list.append("iPalsデータがありません。自家消費量を入力してください")
 
-    annual_payment, rate = calc_lease_payment(principal, company, lease_rate_pct, lease_years)
+    # For シーエナジー: goal-seek lease rate to achieve CE_TARGET_IRR
+    if company == "シーエナジー" and principal > 0 and self_consumption_y1_kwh > 0:
+        rate = _goal_seek_ce_rate(
+            principal=principal,
+            lease_years=lease_years,
+            contract_years=contract_years,
+            self_consumption_y1_kwh=self_consumption_y1_kwh,
+            surplus_y1_kwh=surplus_y1_kwh,
+            fit_price=fit_price,
+            include_surplus=include_surplus,
+            target_dscr=target_dscr,
+            system_kw=system_kw,
+            maintenance_yen_per_kw=maintenance_yen_per_kw,
+            insurance_yen_fixed=insurance_yen_fixed,
+            target_irr=CE_TARGET_IRR,
+        )
+        annual_payment = pmt(rate, lease_years, principal)
+        warnings_list.append(f"CE目標IRR {CE_TARGET_IRR*100:.2f}% → リース金利 {rate*100:.2f}%")
+    else:
+        annual_payment, rate = calc_lease_payment(principal, company, lease_rate_pct, lease_years)
 
     # O&M cost
     om_cost = calc_annual_om_cost(system_kw, maintenance_yen_per_kw, insurance_yen_fixed)

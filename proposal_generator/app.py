@@ -1633,15 +1633,15 @@ with tab2:
             ]
             lease_company = st.selectbox("リース会社", _lease_companies, key="lease_company")
 
-            # Show fixed-rate notice for known companies
-            from proposal_generator.ppa_calc import LEASE_RATE_MAP
-            _known_rate = LEASE_RATE_MAP.get(lease_company)
-            if _known_rate is not None:
-                st.info(
-                    f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%**"
-                    + (" (リース金利)" if lease_company == "シーエナジー" else " (固定)")
-                )
-                lease_rate = _known_rate * 100  # store as % for display
+            # Show rate info for known companies
+            from proposal_generator.ppa_calc import LEASE_RATE_MAP, CE_TARGET_IRR
+            if lease_company == "シーエナジー":
+                st.info(f"**シーエナジー**: 目標IRR **{CE_TARGET_IRR*100:.2f}%** → リース金利は自動算出されます")
+                lease_rate = 0.0  # will be goal-seeked in ppa_calc
+            elif lease_company in LEASE_RATE_MAP:
+                _known_rate = LEASE_RATE_MAP[lease_company]
+                st.info(f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%** (固定)")
+                lease_rate = _known_rate * 100
             else:
                 lease_rate = st.number_input("リース金利 (%)", min_value=0.0, step=0.1, value=6.0, key="lease_rate_input")
 
