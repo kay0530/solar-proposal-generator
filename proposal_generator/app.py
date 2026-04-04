@@ -1639,7 +1639,7 @@ with tab2:
             if _known_rate is not None:
                 st.info(
                     f"**{lease_company}** の適用金利: **{_known_rate*100:.2f}%**"
-                    + (" (CE IRR目標)" if lease_company == "シーエナジー" else " (固定)")
+                    + (" (リース金利)" if lease_company == "シーエナジー" else " (固定)")
                 )
                 lease_rate = _known_rate * 100  # store as % for display
             else:
