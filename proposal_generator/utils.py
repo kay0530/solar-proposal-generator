@@ -275,8 +275,13 @@ def add_header_bar(slide, title: str, logo_path: Optional[Path] = None):
     _add_gradient_rect(slide, 0, 0, SLIDE_W, HEADER_H,
                        C_ORANGE, RGBColor(0xF0, 0x93, 0x5A), angle=90)
 
+    # Use white logo on orange header (auto-detect)
+    _white_logo = Path(__file__).parent / "logo_white.png"
+    _effective_logo = _white_logo if _white_logo.exists() else logo_path
+
     # Logo (left side)
-    if logo_path and logo_path.exists():
+    if _effective_logo and _effective_logo.exists():
+        logo_path = _effective_logo
         logo_h = Inches(0.55)
         logo_w = Inches(1.6)
         add_image_contain(slide,

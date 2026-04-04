@@ -55,12 +55,14 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     # Darker accent strip at left edge
     add_rect(slide, 0, 0, Inches(0.06), SLIDE_H, C_ORANGE_DARK)
 
-    # Logo (white version works best on orange)
-    if logo_path and Path(logo_path).exists():
+    # Logo (white version on orange background)
+    _white_logo = data.get("_logo_white_path")
+    _use_logo = _white_logo if _white_logo and Path(_white_logo).exists() else logo_path
+    if _use_logo and Path(_use_logo).exists():
         from proposal_generator.utils import add_image_contain
         add_image_contain(slide,
                           Inches(0.5), Inches(0.5),
-                          Inches(2.5), Inches(0.7), logo_path)
+                          Inches(2.5), Inches(0.7), _use_logo)
 
     # Main tagline
     add_textbox(slide, Inches(0.5), Inches(2.2),

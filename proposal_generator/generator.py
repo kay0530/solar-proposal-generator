@@ -34,6 +34,7 @@ _SLIDE_DIRS = {
 }
 
 LOGO_PATH = _BASE_DIR / "logo.png"
+LOGO_WHITE_PATH = _BASE_DIR / "logo_white.png"
 
 # Required slides that should always be present (warnings if missing)
 REQUIRED_SLIDES = {"PP0", "EP0"}  # At least one cover slide
@@ -159,6 +160,9 @@ def generate_proposal(
     """
     if logo_path is None:
         logo_path = LOGO_PATH if LOGO_PATH.exists() else None
+    # Add white logo path to data for slides with orange background
+    _logo_white = LOGO_WHITE_PATH if LOGO_WHITE_PATH.exists() else None
+    data["_logo_white_path"] = _logo_white
 
     # Create presentation
     if template_path and template_path.exists():
