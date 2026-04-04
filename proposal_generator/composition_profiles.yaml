@@ -24,6 +24,7 @@ profiles:
       - PP8         # 経済効果試算（20年表）
       - PP8A        # ご契約条件サマリー
       - PP11        # 導入までの流れ
+      - NEW_summary # まとめ
     optional:
       - PP_ESTIMATE # PPA概算費用参考資料
       - PP10        # 補助金活用
