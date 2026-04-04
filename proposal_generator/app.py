@@ -1100,10 +1100,17 @@ with tab1:
             st.caption("※取引先の企業規模を選択してください")
     with col2:
         proposal_date = st.date_input("提案日")
-        site_survey = st.selectbox("現地調査", ["", "実施済み", "未実施"])
+        _survey_options = ["", "実施済み", "未実施"]
+        _survey_default = st.session_state.get("site_survey", "")
+        _survey_idx = _survey_options.index(_survey_default) if _survey_default in _survey_options else 0
+        site_survey = st.selectbox("現地調査", _survey_options, index=_survey_idx, key="site_survey")
     with col3:
         tax_display = st.selectbox("提案書税表記", ["税抜", "税込"])
-        snow_depth = st.number_input("垂直積雪量 (cm)", min_value=0, step=10, value=0)
+        snow_depth = st.number_input(
+            "垂直積雪量 (cm)", min_value=0, step=10,
+            value=st.session_state.get("snow_depth", 0),
+            key="snow_depth",
+        )
 
 # =========================================================================
 # Tab 2: Project Details
