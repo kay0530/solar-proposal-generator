@@ -1347,13 +1347,33 @@ with tab2:
             else:
                 st.session_state.pop("layout_image_path", None)
 
-            # Interactive compass angle selector
-            from proposal_generator.compass_component import compass_input
-            _compass_val = compass_input(
+            # Compass angle selector: slider + interactive SVG
+            _angle = st.select_slider(
+                "方位角 (°)",
+                options=list(range(0, 360, 5)),
                 value=st.session_state.get("compass_angle", 0),
-                key="compass_widget",
+                key="compass_angle",
+                help="0°=北, 90°=東, 180°=南, 270°=西（スライダーをドラッグ）",
             )
-            st.session_state["compass_angle"] = _compass_val
+            _dirs = {0:"北",45:"北東",90:"東",135:"南東",180:"南",225:"南西",270:"西",315:"北西"}
+            _closest = min(_dirs.keys(), key=lambda d: min(abs(_angle-d), 360-abs(_angle-d)))
+            st.markdown(f"""
+            <div style="text-align:center; padding:5px 0;">
+            <svg width="120" height="120" viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="90" fill="none" stroke="#555" stroke-width="2"/>
+              <text x="100" y="22" text-anchor="middle" fill="#ff6b35" font-size="14" font-weight="bold">N</text>
+              <text x="100" y="190" text-anchor="middle" fill="#999" font-size="12">S</text>
+              <text x="188" y="105" text-anchor="middle" fill="#999" font-size="12">E</text>
+              <text x="12" y="105" text-anchor="middle" fill="#999" font-size="12">W</text>
+              <g transform="rotate({_angle}, 100, 100)">
+                <polygon points="100,20 93,100 107,100" fill="#e8490f" opacity="0.9"/>
+                <polygon points="100,180 93,100 107,100" fill="#666" opacity="0.7"/>
+                <circle cx="100" cy="100" r="6" fill="#888"/>
+              </g>
+            </svg>
+            <div style="color:#aaa; font-size:0.85em;">{_angle}° — {_dirs.get(_closest, '')}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         with _layout_col2:
             st.markdown("**積載荷重計算表**")
