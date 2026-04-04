@@ -23,7 +23,10 @@ CONFIG_PATH = Path(__file__).parent / "box_config.json"
 BOX_API_BASE = "https://api.box.com/2.0"
 BOX_UPLOAD_BASE = "https://upload.box.com/api/2.0"
 BOX_TOKEN_URL = "https://api.box.com/oauth2/token"
-DEALS_FOLDER_ID = "164168692319"  # 案件進捗 folder
+DEALS_FOLDER_IDS = [
+    "304936376733",   # 商談 folder (Salesforce Sync primary)
+    "164168692319",   # 案件進捗 folder (legacy)
+]
 
 
 class BoxAuthError(Exception):
@@ -154,54 +157,53 @@ def test_connection() -> dict:
 
 
 def search_deal_folder(deal_name: str) -> Optional[dict]:
-    """Search for a deal folder under 案件進捗 by name.
+    """Search for a deal folder under 商談 / 案件進捗 by name.
 
     Returns {"id": str, "name": str} or None.
-    Uses Box search API first, then falls back to listing folder items
-    (search API can miss results with Japanese/full-width characters).
+    Searches multiple parent folders (商談 + 案件進捗).
+    Uses Box search API first, then falls back to listing folder items.
     """
-    # Strategy 1: Box search API
-    try:
-        # Strip parenthetical suffix for better search hit rate
-        import re
-        search_term = re.split(r'[（(]', deal_name)[0].strip()
-        params = {
-            "query": search_term,
-            "type": "folder",
-            "ancestor_folder_ids": DEALS_FOLDER_ID,
-            "limit": 20,
-        }
-        resp = _request("GET", f"{BOX_API_BASE}/search", params=params)
-        if resp.status_code == 200:
-            for entry in resp.json().get("entries", []):
+    import re
+    search_term = re.split(r'[（(]', deal_name)[0].strip()
+
+    for folder_id in DEALS_FOLDER_IDS:
+        # Strategy 1: Box search API
+        try:
+            params = {
+                "query": search_term,
+                "type": "folder",
+                "ancestor_folder_ids": folder_id,
+                "limit": 20,
+            }
+            resp = _request("GET", f"{BOX_API_BASE}/search", params=params)
+            if resp.status_code == 200:
+                for entry in resp.json().get("entries", []):
+                    name = entry.get("name", "")
+                    if entry.get("type") == "folder" and (deal_name in name or search_term in name):
+                        return {"id": entry["id"], "name": name}
+        except Exception:
+            pass
+
+        # Strategy 2: List items and match by name
+        offset = 0
+        while True:
+            params = {"fields": "id,name,type", "limit": 200, "offset": offset}
+            resp = _request(
+                "GET",
+                f"{BOX_API_BASE}/folders/{folder_id}/items",
+                params=params,
+            )
+            if resp.status_code != 200:
+                break
+            entries = resp.json().get("entries", [])
+            if not entries:
+                break
+            for entry in entries:
                 if entry.get("type") == "folder" and deal_name in entry.get("name", ""):
                     return {"id": entry["id"], "name": entry["name"]}
-                # Also match if search_term is in the folder name
-                if entry.get("type") == "folder" and search_term in entry.get("name", ""):
-                    return {"id": entry["id"], "name": entry["name"]}
-    except Exception:
-        pass
-
-    # Strategy 2: List items in 案件進捗 and match by name
-    offset = 0
-    while True:
-        params = {"fields": "id,name,type", "limit": 200, "offset": offset}
-        resp = _request(
-            "GET",
-            f"{BOX_API_BASE}/folders/{DEALS_FOLDER_ID}/items",
-            params=params,
-        )
-        if resp.status_code != 200:
-            break
-        entries = resp.json().get("entries", [])
-        if not entries:
-            break
-        for entry in entries:
-            if entry.get("type") == "folder" and deal_name in entry.get("name", ""):
-                return {"id": entry["id"], "name": entry["name"]}
-        offset += len(entries)
-        if len(entries) < 200:
-            break
+            offset += len(entries)
+            if len(entries) < 200:
+                break
 
     return None
 
