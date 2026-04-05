@@ -1476,12 +1476,18 @@ with tab2:
             _total_surplus = 0.0
             _total_self_consume = 0.0
             _monthly_gen = [0.0] * 12
+            _hourly_demand = []
+            _hourly_generation = []
+            _hourly_self_consumption = []
+            _hourly_timestamps = []
             _row_count = 0
             for _row in _reader:
                 if len(_row) < 8:
                     continue
                 try:
                     _month = int(_row[0])
+                    _day = int(_row[1])
+                    _hour = int(_row[2])
                     _gen = float(_row[3]) if _row[3] and _row[3] != "-" else 0.0
                     _demand = float(_row[4]) if _row[4] and _row[4] != "-" else 0.0
                     _surplus = float(_row[6]) if _row[6] and _row[6] != "-" else 0.0
@@ -1494,6 +1500,10 @@ with tab2:
                 _total_self_consume += _self_c
                 if 1 <= _month <= 12:
                     _monthly_gen[_month - 1] += _gen
+                _hourly_demand.append(_demand)
+                _hourly_generation.append(_gen)
+                _hourly_self_consumption.append(_self_c)
+                _hourly_timestamps.append((_month, _day, _hour))
                 _row_count += 1
 
             if _row_count > 0:
@@ -1520,9 +1530,153 @@ with tab2:
                     "surplus_kwh": round(_total_surplus),
                     "co2_annual_t": round(_co2_t, 1),
                     "monthly_gen_kwh": [round(m) for m in _monthly_gen],
+                    "hourly_demand": _hourly_demand,
+                    "hourly_generation": _hourly_generation,
+                    "hourly_self_consumption": _hourly_self_consumption,
+                    "hourly_timestamps": _hourly_timestamps,
                 }
             else:
                 st.error("CSVのパースに失敗しました。iPals出力形式を確認してください。")
+
+    # ----- Demand Cut Graph -----
+    _ipals_hourly = st.session_state.get("ipals_data", {})
+    if _ipals_hourly.get("hourly_demand"):
+        with st.expander("📊 デマンドカット分析", expanded=False):
+            import plotly.graph_objects as go
+
+            _h_demand = _ipals_hourly["hourly_demand"]
+            _h_self_c = _ipals_hourly["hourly_self_consumption"]
+            _h_ts = _ipals_hourly["hourly_timestamps"]
+
+            # Post-solar demand = max(0, demand - self_consumption)
+            _h_post_demand = [max(0.0, d - sc) for d, sc in zip(_h_demand, _h_self_c)]
+
+            # Find pre-solar peak
+            _pre_peak_val = max(_h_demand)
+            _pre_peak_idx = _h_demand.index(_pre_peak_val)
+            _pre_peak_ts = _h_ts[_pre_peak_idx]
+
+            # Find post-solar peak
+            _post_peak_val = max(_h_post_demand)
+            _post_peak_idx = _h_post_demand.index(_post_peak_val)
+            _post_peak_ts = _h_ts[_post_peak_idx]
+
+            # KPIs
+            _dc_k1, _dc_k2, _dc_k3 = st.columns(3)
+            with _dc_k1:
+                st.metric(
+                    "導入前ピークデマンド",
+                    f"{_pre_peak_val:,.1f} kW",
+                    help=f"{_pre_peak_ts[0]}月{_pre_peak_ts[1]}日 {_pre_peak_ts[2]}時",
+                )
+            with _dc_k2:
+                st.metric(
+                    "導入後ピークデマンド",
+                    f"{_post_peak_val:,.1f} kW",
+                    help=f"{_post_peak_ts[0]}月{_post_peak_ts[1]}日 {_post_peak_ts[2]}時",
+                )
+            with _dc_k3:
+                _demand_cut = _pre_peak_val - _post_peak_val
+                st.metric("デマンド削減量", f"{_demand_cut:,.1f} kW")
+
+            def _extract_window(peak_idx, total_len):
+                """Extract ~12-day (288h) window around peak, aligned to midnight."""
+                # Find midnight of peak day (hour 0)
+                _peak_day_start = peak_idx - _h_ts[peak_idx][2]  # subtract hour
+                # Start 3 days before
+                _win_start = max(0, _peak_day_start - 3 * 24)
+                # End 9 days after start (total 12 days = 288 hours)
+                _win_end = min(total_len, _win_start + 12 * 24)
+                return _win_start, _win_end
+
+            _n_hours = len(_h_demand)
+
+            # --- Chart 1: Pre-solar peak period ---
+            _w1_start, _w1_end = _extract_window(_pre_peak_idx, _n_hours)
+            _w1_ts = _h_ts[_w1_start:_w1_end]
+            _w1_demand = _h_demand[_w1_start:_w1_end]
+            _w1_self_c = _h_self_c[_w1_start:_w1_end]
+            # X-axis labels
+            _w1_labels = [f"{t[0]}/{t[1]} {t[2]:02d}:00" for t in _w1_ts]
+            # Tick positions: show date at hour 0
+            _w1_tickvals = [i for i, t in enumerate(_w1_ts) if t[2] == 0]
+            _w1_ticktext = [f"{_w1_ts[i][0]}/{_w1_ts[i][1]}" for i in _w1_tickvals]
+
+            fig1 = go.Figure()
+            fig1.add_trace(go.Scatter(
+                x=list(range(len(_w1_demand))), y=_w1_demand,
+                mode="lines", name="使用電力量",
+                line=dict(color="royalblue", width=1.5),
+                hovertext=_w1_labels,
+            ))
+            fig1.add_trace(go.Scatter(
+                x=list(range(len(_w1_self_c))), y=_w1_self_c,
+                mode="lines", name="自家消費量", fill="tozeroy",
+                line=dict(color="orange", width=0.5),
+                fillcolor="rgba(255,165,0,0.3)",
+                hovertext=_w1_labels,
+            ))
+            fig1.add_hline(
+                y=_pre_peak_val, line_dash="dash", line_color="red", line_width=1.5,
+                annotation_text=f"ピーク {_pre_peak_val:,.0f} kW",
+                annotation_position="top left",
+            )
+            fig1.update_layout(
+                title="① PV導入前 ピーク期間",
+                xaxis=dict(
+                    tickvals=_w1_tickvals, ticktext=_w1_ticktext,
+                    title="日付",
+                ),
+                yaxis=dict(title="電力量 (kW)"),
+                height=350, margin=dict(t=40, b=40, l=50, r=20),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+
+            # --- Chart 2: Post-solar peak period ---
+            _w2_start, _w2_end = _extract_window(_post_peak_idx, _n_hours)
+            _w2_ts = _h_ts[_w2_start:_w2_end]
+            _w2_post_demand = _h_post_demand[_w2_start:_w2_end]
+            _w2_self_c = _h_self_c[_w2_start:_w2_end]
+            _w2_labels = [f"{t[0]}/{t[1]} {t[2]:02d}:00" for t in _w2_ts]
+            _w2_tickvals = [i for i, t in enumerate(_w2_ts) if t[2] == 0]
+            _w2_ticktext = [f"{_w2_ts[i][0]}/{_w2_ts[i][1]}" for i in _w2_tickvals]
+
+            fig2 = go.Figure()
+            fig2.add_trace(go.Scatter(
+                x=list(range(len(_w2_post_demand))), y=_w2_post_demand,
+                mode="lines", name="PV導入後 使用電力量",
+                line=dict(color="royalblue", width=1.5),
+                hovertext=_w2_labels,
+            ))
+            fig2.add_trace(go.Scatter(
+                x=list(range(len(_w2_self_c))), y=_w2_self_c,
+                mode="lines", name="自家消費量", fill="tozeroy",
+                line=dict(color="orange", width=0.5),
+                fillcolor="rgba(255,165,0,0.3)",
+                hovertext=_w2_labels,
+            ))
+            fig2.add_hline(
+                y=_pre_peak_val, line_dash="dash", line_color="red", line_width=1.5,
+                annotation_text=f"導入前ピーク {_pre_peak_val:,.0f} kW",
+                annotation_position="top left",
+            )
+            fig2.add_hline(
+                y=_post_peak_val, line_dash="dash", line_color="green", line_width=1.5,
+                annotation_text=f"導入後ピーク {_post_peak_val:,.0f} kW",
+                annotation_position="bottom left",
+            )
+            fig2.update_layout(
+                title="② PV導入後 ピーク期間",
+                xaxis=dict(
+                    tickvals=_w2_tickvals, ticktext=_w2_ticktext,
+                    title="日付",
+                ),
+                yaxis=dict(title="電力量 (kW)"),
+                height=350, margin=dict(t=40, b=40, l=50, r=20),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig2, use_container_width=True)
 
     # ----- Contract Terms -----
     with st.expander("📋 契約条件", expanded=True):
@@ -1839,7 +1993,7 @@ with tab2:
                 with _cols[2]:
                     st.metric("実効金利", f"{_calc_res['effective_rate_pct']:.2f}%")
                 with _cols[3]:
-                    st.metric("最小PPA単価（DSCR達成）", f"{_calc_res['min_ppa_price']:.1f} 円/kWh")
+                    st.metric("最小PPA単価（DSCR達成）", f"{_calc_res['min_ppa_price']:.2f} 円/kWh")
                 with _cols[4]:
                     _ad = _calc_res.get("avg_dscr")
                     st.metric("平均DSCR", f"{_ad:.3f}" if _ad else "—")
@@ -1852,7 +2006,7 @@ with tab2:
                 _adj_col1, _adj_col2 = st.columns([1, 1])
                 with _adj_col1:
                     if st.button(
-                        f"この単価を適用 → {_auto_price:.1f} 円/kWh",
+                        f"この単価を適用 → {_auto_price:.2f} 円/kWh",
                         key="apply_ppa_price",
                         type="secondary",
                     ):
@@ -2369,7 +2523,7 @@ with tab4:
             st.metric("販売価格", f"¥{sp:,.0f}" if sp else "—",
                       delta=f"¥{kw_price:,}/kW" if kw_price else None, delta_color="off")
         else:
-            st.metric("PPA単価", f"{customer_data.get('ppa_unit_price', 0):.1f} 円/kWh")
+            st.metric("PPA単価", f"{customer_data.get('ppa_unit_price', 0):.2f} 円/kWh")
     with sum_col5:
         st.metric("スライド数", f"{len(selected_slides)} 枚")
 
