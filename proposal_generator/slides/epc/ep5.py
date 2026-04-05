@@ -10,7 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pptx.chart.data import CategoryChartData
-from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_TICK_LABEL_POSITION
+from pptx.enum.dml import MSO_LINE_DASH_STYLE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
@@ -181,7 +182,7 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     series_peak = plot.series[1]
     series_peak.format.line.color.rgb = RGBColor(0xFF, 0x00, 0x00)
     series_peak.format.line.width = Pt(1.0)
-    series_peak.format.line.dash_style = 4
+    series_peak.format.line.dash_style = MSO_LINE_DASH_STYLE.DASH
     series_peak.smooth = False
 
     value_axis = chart.value_axis
@@ -190,4 +191,4 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
 
     cat_axis = chart.category_axis
     cat_axis.tick_labels.font.size = Pt(7)
-    cat_axis.tick_label_position = -4134  # XL_TICK_LABEL_POSITION.LOW
+    cat_axis.tick_label_position = XL_TICK_LABEL_POSITION.LOW

@@ -45,7 +45,16 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     # Overlay compass indicator when angle is specified
     compass_angle = data.get("compass_angle")
     if compass_angle is not None and has_image:
-        _render_compass_indicator(slide, compass_angle)
+        # Calculate image area bounds for compass positioning
+        if has_image and has_load:
+            col_gap = Inches(0.3)
+            left_w = (SLIDE_W - MARGIN * 2 - col_gap) * 0.55
+            _img_right = MARGIN + left_w
+            _img_top = CONTENT_TOP + Inches(0.35)
+        else:
+            _img_right = SLIDE_W - MARGIN
+            _img_top = CONTENT_TOP + Inches(1.05)
+        _render_compass_indicator(slide, compass_angle, _img_right, _img_top)
 
     add_footer(slide)
 
@@ -251,22 +260,28 @@ def _angle_label(angle: int) -> str:
     return f"{angle}°"
 
 
-def _render_compass_indicator(slide, angle: int) -> None:
-    """Draw a professional compass rose indicator in the top-right corner.
+def _render_compass_indicator(slide, angle: int,
+                              img_right=None, img_top=None) -> None:
+    """Draw a compass rose indicator near the image upper-right corner.
 
-    Creates a grouped compass with:
-    - Circle with cross-hair lines (8 directions)
-    - North arrow pointing in the correct direction
-    - "真北" label on the arrow tip
-    - Angle label at bottom
+    All compass shapes are grouped into a single p:grpSp element.
     """
     from pptx.enum.shapes import MSO_SHAPE
+    from pptx.oxml import OxmlElement
+    from pptx.oxml.ns import qn
     import math
 
     box_w = Inches(1.1)
     box_h = Inches(1.2)
-    box_x = SLIDE_W - MARGIN - box_w
-    box_y = CONTENT_TOP + Inches(0.05)
+    if img_right is not None and img_top is not None:
+        box_x = img_right - box_w - Inches(0.1)
+        box_y = img_top + Inches(0.1)
+    else:
+        box_x = SLIDE_W - MARGIN - box_w
+        box_y = CONTENT_TOP + Inches(0.05)
+
+    # Track shapes for grouping
+    _n_before = len(slide.shapes)
 
     # White background box with border
     add_rounded_rect(
@@ -375,3 +390,44 @@ def _render_compass_indicator(slide, angle: int) -> None:
         font_name=FONT_BODY, font_size_pt=8,
         font_color=C_SUB, align=PP_ALIGN.CENTER,
     )
+
+    # Group all compass shapes
+    _compass_shapes = list(slide.shapes)[_n_before:]
+    if len(_compass_shapes) > 1:
+        spTree = slide.shapes._spTree
+        grpSp = OxmlElement('p:grpSp')
+        # Non-visual properties
+        nvGrpSpPr = OxmlElement('p:nvGrpSpPr')
+        cNvPr = OxmlElement('p:cNvPr')
+        _max_id = max(
+            (int(el.get('id', '0'))
+             for el in spTree.iter(qn('p:cNvPr'))),
+            default=0,
+        )
+        cNvPr.set('id', str(_max_id + 1))
+        cNvPr.set('name', 'Compass Group')
+        nvGrpSpPr.append(cNvPr)
+        nvGrpSpPr.append(OxmlElement('p:cNvGrpSpPr'))
+        nvGrpSpPr.append(OxmlElement('p:nvPr'))
+        grpSp.append(nvGrpSpPr)
+        # Group transform
+        grpSpPr = OxmlElement('p:grpSpPr')
+        xfrm = OxmlElement('a:xfrm')
+        for tag, attrs in [
+            ('a:off', {'x': str(int(box_x)), 'y': str(int(box_y))}),
+            ('a:ext', {'cx': str(int(box_w)), 'cy': str(int(box_h))}),
+            ('a:chOff', {'x': str(int(box_x)), 'y': str(int(box_y))}),
+            ('a:chExt', {'cx': str(int(box_w)), 'cy': str(int(box_h))}),
+        ]:
+            el = OxmlElement(tag)
+            for k, v in attrs.items():
+                el.set(k, v)
+            xfrm.append(el)
+        grpSpPr.append(xfrm)
+        grpSp.append(grpSpPr)
+        # Move shapes into group
+        for shape in _compass_shapes:
+            el = shape._element
+            spTree.remove(el)
+            grpSp.append(el)
+        spTree.append(grpSp)

@@ -122,13 +122,11 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                 info, font_name=FONT_BODY, font_size_pt=7, font_color=C_DARK)
     table_y += Inches(0.22)
 
-    # Penalty table: milestones
-    milestones = [1, 3, 5, 7, 10, 15, 20]
-    header = ["経過年数"] + [f"{yr}年" for yr in milestones if yr <= years]
+    # Penalty table: all years up to contract period
+    milestones = list(range(1, years + 1))
+    header = ["経過年数"] + [f"{yr}年" for yr in milestones]
     values = ["違約金"]
     for yr in milestones:
-        if yr > years:
-            break
         remaining = max(selling_price - depr_limit * yr, depr_limit)
         values.append(fmt_yen(remaining))
 
@@ -137,7 +135,7 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         col_w_each = table_w / len(header)
         col_widths = [col_w_each] * len(header)
         add_table(slide, MARGIN, table_y, table_w, [header, values],
-                  col_widths, font_size_pt=7)
+                  col_widths, font_size_pt=5)
         table_y += Inches(0.45)
 
     # PPA note below penalty table
