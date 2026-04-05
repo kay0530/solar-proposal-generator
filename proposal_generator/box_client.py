@@ -1,7 +1,16 @@
 """
 box_client.py - Box REST API integration for proposal file management.
 
-Uses OAuth 2.0 with refresh token for persistent authentication.
+Supports two authentication methods:
+  1. Client Credentials Grant (CCG) — preferred for server-to-server.
+     Requires client_id, client_secret, enterprise_id in config.
+     Token auto-refreshes every 60 min; no user interaction needed.
+  2. OAuth 2.0 with refresh token — legacy, for user-delegated access.
+     Requires client_id, client_secret, refresh_token in config.
+
+Auth method is auto-detected: if enterprise_id is present, CCG is used.
+Can be overridden by setting auth_method = "ccg" or "oauth2" in config.
+
 Tokens are stored in box_config.json (local) or st.secrets (Cloud).
 
 Box folder structure (Salesforce Sync):
@@ -12,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -75,6 +85,81 @@ def _save_config(cfg: dict) -> None:
             logger.warning("Could not persist Box config")
 
 
+def _detect_auth_method(cfg: dict) -> str:
+    """Detect which auth method to use based on config values.
+
+    Returns "ccg" or "oauth2".
+    """
+    explicit = cfg.get("auth_method", "").lower()
+    if explicit in ("ccg", "oauth2"):
+        return explicit
+    # Auto-detect: enterprise_id present → CCG
+    if cfg.get("enterprise_id"):
+        return "ccg"
+    # Fallback to OAuth2 (refresh_token flow)
+    return "oauth2"
+
+
+def _get_access_token_ccg() -> str:
+    """Obtain an access token using Client Credentials Grant (CCG).
+
+    CCG tokens are valid for 60 minutes. No refresh token is involved;
+    a new token is simply requested when the old one expires.
+    The token and its expiry timestamp are cached in session_state.
+    """
+    cfg = _load_config()
+    client_id = cfg.get("client_id", "")
+    client_secret = cfg.get("client_secret", "")
+    enterprise_id = cfg.get("enterprise_id", "")
+
+    if not all([client_id, client_secret, enterprise_id]):
+        raise BoxAuthError(
+            "box_config.json または st.secrets[box] に "
+            "client_id / client_secret / enterprise_id を設定してください"
+        )
+
+    # Check cached CCG token in session_state
+    try:
+        import streamlit as st
+        cached_token = st.session_state.get("_box_ccg_token")
+        cached_expiry = st.session_state.get("_box_ccg_expiry", 0)
+        if cached_token and time.time() < cached_expiry:
+            return cached_token
+    except Exception:
+        pass
+
+    resp = requests.post(BOX_TOKEN_URL, data={
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "box_subject_type": "enterprise",
+        "box_subject_id": enterprise_id,
+    })
+
+    if resp.status_code != 200:
+        try:
+            err = resp.json().get("error_description", resp.text)
+        except Exception:
+            err = resp.text
+        raise BoxAuthError(f"CCG token request failed: {err}")
+
+    data = resp.json()
+    access_token = data["access_token"]
+    expires_in = data.get("expires_in", 3600)
+    # Cache with 60-second safety margin
+    expiry_ts = time.time() + expires_in - 60
+
+    try:
+        import streamlit as st
+        st.session_state["_box_ccg_token"] = access_token
+        st.session_state["_box_ccg_expiry"] = expiry_ts
+    except Exception:
+        pass
+
+    logger.info("Box CCG access token obtained successfully")
+    return access_token
+
+
 def _refresh_access_token() -> str:
     """Use refresh_token to obtain a new access_token from Box OAuth2.
 
@@ -111,9 +196,25 @@ def _refresh_access_token() -> str:
     return data["access_token"]
 
 
+def _clear_ccg_cache() -> None:
+    """Clear cached CCG token from session_state."""
+    try:
+        import streamlit as st
+        st.session_state.pop("_box_ccg_token", None)
+        st.session_state.pop("_box_ccg_expiry", None)
+    except Exception:
+        pass
+
+
 def _get_access_token() -> str:
-    """Get a valid access token, refreshing if needed."""
+    """Get a valid access token, using CCG or OAuth2 depending on config."""
     cfg = _load_config()
+    auth_method = _detect_auth_method(cfg)
+
+    if auth_method == "ccg":
+        return _get_access_token_ccg()
+
+    # OAuth2 flow: use cached token or refresh
     token = cfg.get("access_token", "")
     if token:
         return token
@@ -133,9 +234,15 @@ def _request(method: str, url: str, **kwargs) -> requests.Response:
     resp = requests.request(method, url, headers=headers, **kwargs)
 
     if resp.status_code == 401:
-        # Token expired — refresh and retry once
+        # Token expired — clear cache and get fresh token
         logger.info("Access token expired, refreshing...")
-        new_token = _refresh_access_token()
+        cfg = _load_config()
+        auth_method = _detect_auth_method(cfg)
+        if auth_method == "ccg":
+            _clear_ccg_cache()
+            new_token = _get_access_token_ccg()
+        else:
+            new_token = _refresh_access_token()
         headers["Authorization"] = f"Bearer {new_token}"
         resp = requests.request(method, url, headers=headers, **kwargs)
 
@@ -143,8 +250,12 @@ def _request(method: str, url: str, **kwargs) -> requests.Response:
 
 
 def is_available() -> bool:
-    """Check if Box integration is configured."""
+    """Check if Box integration is configured (CCG or OAuth2)."""
     cfg = _load_config()
+    # CCG: enterprise_id + client credentials
+    if cfg.get("enterprise_id") and cfg.get("client_id") and cfg.get("client_secret"):
+        return True
+    # OAuth2: refresh_token or existing access_token
     return bool(cfg.get("refresh_token") or cfg.get("access_token"))
 
 
