@@ -415,7 +415,7 @@ def calc_min_ppa_price(
         depreciation_tax_schedule: Year-by-year depreciation tax (for LOAN only)
 
     Returns:
-        Minimum PPA unit price (yen/kWh), rounded up to nearest 0.5 yen
+        Minimum PPA unit price (yen/kWh), rounded up to nearest 0.1 yen
     """
     if self_consumption_y1_kwh <= 0:
         return 0.0
@@ -456,8 +456,8 @@ def calc_min_ppa_price(
     if raw_price <= 0:
         return 0.0
 
-    # Round up to nearest 0.5 yen
-    return math.ceil(raw_price * 2) / 2
+    # Round up to nearest 0.1 yen
+    return math.ceil(raw_price * 10) / 10
 
 
 def calc_cashflow_table(
