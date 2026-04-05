@@ -692,6 +692,13 @@ def _restore_widget_keys(data: dict) -> None:
         # Also add demand if available
         if "annual_demand_kwh" in data:
             _ipals["annual_demand_kwh"] = data["annual_demand_kwh"]
+        # Restore hourly arrays for PP9/EP5 demand cut chart
+        _hourly_rows = data.get("hourly_rows", [])
+        if _hourly_rows:
+            _ipals["hourly_demand"] = [r["demand_kw"] for r in _hourly_rows]
+            _ipals["hourly_generation"] = [r.get("gen_kw", 0) for r in _hourly_rows]
+            _ipals["hourly_self_consumption"] = [r.get("self_consumption_kw", 0) for r in _hourly_rows]
+            _ipals["hourly_timestamps"] = [(r["month"], r["day"], r["hour"]) for r in _hourly_rows]
         st.session_state["ipals_data"] = _ipals
 
     # Restore PPA calc result if present
