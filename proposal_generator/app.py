@@ -2318,6 +2318,22 @@ with tab2:
             "co2_annual_t": _ipals.get("co2_annual_t"),
             "monthly_gen_kwh": _ipals.get("monthly_gen_kwh"),
         })
+        # Build hourly_rows for PP9/EP5 demand cut chart in PPTX
+        _h_demand = _ipals.get("hourly_demand", [])
+        _h_gen = _ipals.get("hourly_generation", [])
+        _h_sc = _ipals.get("hourly_self_consumption", [])
+        _h_ts = _ipals.get("hourly_timestamps", [])
+        if _h_demand and _h_ts and len(_h_demand) == len(_h_ts):
+            _hourly_rows = []
+            for i, (m, d, h) in enumerate(_h_ts):
+                _hourly_rows.append({
+                    "month": m, "day": d, "hour": h,
+                    "demand_kw": _h_demand[i],
+                    "gen_kw": _h_gen[i] if i < len(_h_gen) else 0,
+                    "self_consumption_kw": _h_sc[i] if i < len(_h_sc) else 0,
+                    "surplus_kw": 0,
+                })
+            st.session_state["customer_data"]["hourly_rows"] = _hourly_rows
 
     # Merge layout image path and load calc data if available
     _layout_path = st.session_state.get("layout_image_path")

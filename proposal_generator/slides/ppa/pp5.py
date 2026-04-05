@@ -8,6 +8,7 @@ Gracefully degrades when either image or load data is missing.
 from __future__ import annotations
 from pathlib import Path
 from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
 from pptx.util import Inches, Pt
 from proposal_generator.utils import (
     CONTENT_TOP, C_DARK, C_LIGHT_GRAY, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
@@ -338,22 +339,25 @@ def _render_compass_indicator(slide, angle: int) -> None:
     arrow_line.line.width = Pt(2.0)
 
     # North pointer triangle at arrow tip
+    # Position triangle center along arrow direction so base touches tip
     tri_size = Inches(0.15)
-    tri_x = ax2 - tri_size / 2
-    tri_y = ay2 - tri_size
+    tri_offset = tri_size / 2
+    tri_cx = ax2 + tri_offset * math.sin(rad_n)
+    tri_cy = ay2 - tri_offset * math.cos(rad_n)
     tri = slide.shapes.add_shape(
         MSO_SHAPE.ISOSCELES_TRIANGLE,
-        int(tri_x), int(tri_y), int(tri_size), int(tri_size),
+        int(tri_cx - tri_size / 2), int(tri_cy - tri_size / 2),
+        int(tri_size), int(tri_size),
     )
     tri.fill.solid()
     tri.fill.fore_color.rgb = C_ORANGE
     tri.line.fill.background()
     tri.rotation = float(angle)
 
-    # "真北" label near arrow tip
-    label_offset = Inches(0.18)
-    lx = ax2 + label_offset * math.sin(rad_n) - Inches(0.2)
-    ly = ay2 - label_offset * math.cos(rad_n) - Inches(0.08)
+    # "真��" label near arrow tip
+    label_offset = Inches(0.22)
+    lx = tri_cx + label_offset * math.sin(rad_n) - Inches(0.2)
+    ly = tri_cy - label_offset * math.cos(rad_n) - Inches(0.08)
     add_textbox(
         slide, int(lx), int(ly), Inches(0.4), Inches(0.16),
         "真北",
