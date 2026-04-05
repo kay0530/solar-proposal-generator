@@ -127,7 +127,7 @@ def _calc_ce_lease_rate(
     principal: float,
     lease_years: int,
     target_irr: float = CE_TARGET_IRR,
-) -> float:
+) -> tuple[float, float]:
     """Calculate lease rate for シーエナジー to achieve target IRR.
 
     Replicates the CE sheet FCF model from the Excel:
@@ -142,9 +142,12 @@ def _calc_ce_lease_rate(
            interest (CE borrows at 2%, 元金均等返済 on principal)
 
     Binary search finds lease_rate where IRR(FCF) ≈ target_irr.
+
+    Returns:
+        (lease_rate, achieved_ce_irr) - the lease rate and actual achieved CE IRR.
     """
     if selling_price <= 0 or principal <= 0 or lease_years <= 0:
-        return target_irr
+        return target_irr, target_irr
 
     # CE sheet constants
     CE_TAX_RATE = 0.31
@@ -199,7 +202,9 @@ def _calc_ce_lease_rate(
         if abs(mid_irr - target_irr) < 1e-5:
             break
 
-    return round((lo + hi) / 2, 4)
+    final_rate = round((lo + hi) / 2, 4)
+    final_irr = _ce_irr_at_rate(final_rate)
+    return final_rate, final_irr
 
 
 # ---------------------------------------------------------------------------
@@ -556,6 +561,70 @@ def calc_cashflow_table(
     return rows
 
 
+def calc_penalty_table(
+    annual_lease_payment: float,
+    re_lease_annual: float,
+    subsidy_amount: float,
+    system_kw: float,
+    lease_years: int,
+    contract_years: int,
+) -> dict:
+    """Calculate early termination penalty table (違約金テーブル).
+
+    Logic (from Excel PP12):
+        base = lease_total + re_lease_total + subsidy
+        unit_price = ROUND(base / system_kw, -2)  (nearest 100)
+        equipment_value = unit_price * system_kw
+        annual_depreciation = equipment_value / lease_years
+        penalty(N) = equipment_value - (N-1) * annual_depreciation  (if N <= lease_years, else 0)
+
+    Args:
+        annual_lease_payment: Annual lease payment (yen)
+        re_lease_annual:      Re-lease annual amount (yen, 0 if not みずほリース)
+        subsidy_amount:       Subsidy amount (yen)
+        system_kw:            System capacity (kW)
+        lease_years:          Lease/depreciation term (years)
+        contract_years:       Total contract duration (years)
+
+    Returns:
+        Dict with base_amount, unit_price_per_kw, equipment_value,
+        annual_depreciation, penalties_by_year (1..contract_years)
+    """
+    if system_kw <= 0 or lease_years <= 0:
+        return {
+            "base_amount": 0,
+            "unit_price_per_kw": 0,
+            "equipment_value": 0,
+            "annual_depreciation": 0,
+            "penalties_by_year": {y: 0 for y in range(1, contract_years + 1)},
+        }
+
+    lease_total = annual_lease_payment * lease_years
+    re_lease_total = re_lease_annual * max(contract_years - lease_years, 0)
+    base_amount = lease_total + re_lease_total + subsidy_amount
+
+    # Round kW unit price to nearest 100
+    unit_price_per_kw = round(base_amount / system_kw, -2)
+    equipment_value = unit_price_per_kw * system_kw
+    annual_depreciation = equipment_value / lease_years
+
+    penalties: dict[int, int] = {}
+    for year in range(1, contract_years + 1):
+        if year <= lease_years:
+            penalty = equipment_value - (year - 1) * annual_depreciation
+        else:
+            penalty = 0
+        penalties[year] = round(penalty)
+
+    return {
+        "base_amount": round(base_amount),
+        "unit_price_per_kw": round(unit_price_per_kw),
+        "equipment_value": round(equipment_value),
+        "annual_depreciation": round(annual_depreciation),
+        "penalties_by_year": penalties,
+    }
+
+
 def auto_calc_ppa(
     self_consumption_y1_kwh: float,
     surplus_y1_kwh: float,
@@ -618,10 +687,11 @@ def auto_calc_ppa(
         warnings_list.append("iPalsデータがありません。自家消費量を入力してください")
 
     # For シーエナジー: auto-calculate lease rate from CE_TARGET_IRR
+    ce_irr: float | None = None
     if company == "シーエナジー" and principal > 0 and selling_price > 0:
-        rate = _calc_ce_lease_rate(selling_price, principal, lease_years)
+        rate, ce_irr = _calc_ce_lease_rate(selling_price, principal, lease_years)
         annual_payment = pmt(rate, lease_years, principal)
-        warnings_list.append(f"CE目標IRR {CE_TARGET_IRR*100:.2f}% → リース金利 {rate*100:.2f}%")
+        warnings_list.append(f"CE目標IRR {CE_TARGET_IRR*100:.2f}% → リース金利 {rate*100:.2f}% (実績IRR {ce_irr*100:.2f}%)")
     else:
         annual_payment, rate = calc_lease_payment(principal, company, lease_rate_pct, lease_years)
 
@@ -717,6 +787,7 @@ def auto_calc_ppa(
         "irr_pct": ppa_irr,
         "npv_yen": ppa_npv,
         "re_lease_annual": re_lease_annual,
+        "ce_irr_pct": round(ce_irr * 100, 2) if ce_irr is not None else None,
     }
 
     # Add bank loan specific fields
@@ -725,5 +796,16 @@ def auto_calc_ppa(
         result["depreciation_tax_y1"] = dep_tax_schedule[0] if dep_tax_schedule else 0
         result["annual_interest_y1"] = loan_schedule[0]["interest"] if loan_schedule else 0
         result["annual_principal"] = loan_schedule[0]["principal"] if loan_schedule else 0
+
+    # Early termination penalty table
+    if system_kw > 0 and annual_payment > 0:
+        result["penalty_table"] = calc_penalty_table(
+            annual_lease_payment=annual_payment,
+            re_lease_annual=re_lease_annual,
+            subsidy_amount=subsidy_amount,
+            system_kw=system_kw,
+            lease_years=lease_years,
+            contract_years=contract_years,
+        )
 
     return result

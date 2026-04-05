@@ -1829,18 +1829,23 @@ with tab2:
                 for _w in _warns:
                     st.warning(_w)
 
-                _r1, _r2, _r3, _r4, _r5 = st.columns(5)
-                with _r1:
+                _ce_irr_val = _calc_res.get("ce_irr_pct")
+                _n_cols = 6 if _ce_irr_val is not None else 5
+                _cols = st.columns(_n_cols)
+                with _cols[0]:
                     st.metric("リース年額", f"¥{_calc_res['annual_lease_payment']:,.0f}")
-                with _r2:
+                with _cols[1]:
                     st.metric("O&M年額", f"¥{_calc_res.get('annual_om_cost', 0):,.0f}")
-                with _r3:
+                with _cols[2]:
                     st.metric("実効金利", f"{_calc_res['effective_rate_pct']:.2f}%")
-                with _r4:
+                with _cols[3]:
                     st.metric("最小PPA単価（DSCR達成）", f"{_calc_res['min_ppa_price']:.1f} 円/kWh")
-                with _r5:
+                with _cols[4]:
                     _ad = _calc_res.get("avg_dscr")
                     st.metric("平均DSCR", f"{_ad:.3f}" if _ad else "—")
+                if _ce_irr_val is not None:
+                    with _cols[5]:
+                        st.metric("CE実績IRR", f"{_ce_irr_val:.2f}%")
 
                 # Apply button + manual adjustment
                 _auto_price = float(_calc_res["min_ppa_price"])
@@ -1886,6 +1891,31 @@ with tab2:
                             "純CF(円)": "{:,.0f}",
                             "DSCR": lambda x: f"{x:.3f}" if x else "—",
                         }),
+                        use_container_width=True,
+                        height=300,
+                    )
+
+                # Penalty table (違約金テーブル)
+                _pt = _calc_res.get("penalty_table")
+                if _pt and _pt.get("equipment_value", 0) > 0:
+                    st.markdown("---")
+                    st.subheader("違約金テーブル（中途解約時）")
+                    _pt_c1, _pt_c2, _pt_c3 = st.columns(3)
+                    with _pt_c1:
+                        st.metric("設備価額", f"¥{_pt['equipment_value']:,.0f}")
+                    with _pt_c2:
+                        st.metric("設備kW単価", f"¥{_pt['unit_price_per_kw']:,.0f}")
+                    with _pt_c3:
+                        st.metric("年間償却限度額", f"¥{_pt['annual_depreciation']:,.0f}")
+
+                    import pandas as pd
+                    _pen_rows = [
+                        {"年": y, "違約金(円)": amt}
+                        for y, amt in sorted(_pt["penalties_by_year"].items())
+                    ]
+                    _pen_df = pd.DataFrame(_pen_rows)
+                    st.dataframe(
+                        _pen_df.style.format({"違約金(円)": "{:,.0f}"}),
                         use_container_width=True,
                         height=300,
                     )
