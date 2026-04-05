@@ -870,15 +870,19 @@ with tab1:
                 st.info("保存済みの案件はありません")
 
             _upload = st.file_uploader("またはJSONをアップロード", type=["json"], key="upload_case")
-            if _upload:
+            if _upload and not st.session_state.get("_upload_processed"):
                 _loaded = json.load(_upload)
                 st.session_state["customer_data"] = _loaded
                 st.session_state["sf_company"] = _loaded.get("company_name", "")
                 st.session_state["sf_office"] = _loaded.get("office_name", "")
                 st.session_state["sf_address"] = _loaded.get("address", "")
                 _restore_widget_keys(_loaded)
-                st.success("アップロードしたデータを読み込みました")
+                st.session_state["_upload_processed"] = True
                 st.rerun()
+            elif _upload and st.session_state.get("_upload_processed"):
+                st.success("アップロードしたデータを読み込みました")
+            if not _upload:
+                st.session_state.pop("_upload_processed", None)
 
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
         _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
