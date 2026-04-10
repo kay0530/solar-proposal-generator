@@ -38,6 +38,56 @@ st.set_page_config(
 BASE_DIR = Path(__file__).parent
 PROFILES_PATH = BASE_DIR / "composition_profiles.yaml"
 
+# ---------------------------------------------------------------------------
+# Authentication gate
+# ---------------------------------------------------------------------------
+
+def _check_auth() -> bool:
+    """Show login form and verify credentials. Returns True if authenticated."""
+    if st.session_state.get("_authenticated"):
+        return True
+
+    try:
+        _auth_pw = st.secrets["auth"]["password"]
+    except (KeyError, FileNotFoundError):
+        # No auth configured (local dev) — allow access
+        return True
+
+    st.markdown(
+        "<div style='text-align:center; padding-top:80px'>",
+        unsafe_allow_html=True,
+    )
+    st.title("☀️ 提案資料ジェネレーター")
+    st.caption("ログインしてください")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    with st.form("login_form"):
+        _email = st.text_input("メールアドレス", placeholder="name@altenergy.co.jp")
+        _pw = st.text_input("パスワード", type="password")
+        _submit = st.form_submit_button("ログイン", use_container_width=True)
+
+    if _submit:
+        # Check allowed emails if configured
+        try:
+            _allowed = st.secrets["auth"]["allowed_emails"]
+            if _email not in _allowed:
+                st.error("許可されていないメールアドレスです")
+                return False
+        except (KeyError, FileNotFoundError):
+            pass
+
+        if _pw == _auth_pw:
+            st.session_state["_authenticated"] = True
+            st.session_state["_auth_email"] = _email
+            st.rerun()
+        else:
+            st.error("パスワードが正しくありません")
+    return False
+
+
+if not _check_auth():
+    st.stop()
+
 _SORTABLE_STYLE = (
     ".sortable-item { text-align: left !important; "
     "max-width: 55% !important; padding: 5px 12px !important; "
