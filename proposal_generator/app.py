@@ -42,8 +42,23 @@ PROFILES_PATH = BASE_DIR / "composition_profiles.yaml"
 # Authentication gate
 # ---------------------------------------------------------------------------
 
+def _auth_token(email: str, password: str) -> str:
+    """Derive a stable auth token from email + password using HMAC-SHA256."""
+    import hashlib
+    import hmac
+    secret = password.encode("utf-8")
+    message = email.lower().encode("utf-8")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()[:32]
+
+
 def _check_auth() -> bool:
-    """Show login form and verify credentials. Returns True if authenticated."""
+    """Show login form and verify credentials. Returns True if authenticated.
+
+    Login state is persisted via URL query param (?t=<token>) so the user
+    stays signed in across page reloads until the browser is closed or the
+    URL is cleared.
+    """
+    # Already authenticated in this session
     if st.session_state.get("_authenticated"):
         return True
 
@@ -53,8 +68,22 @@ def _check_auth() -> bool:
         # No auth configured (local dev) — allow access
         return True
 
+    # Try to restore auth from URL query param
+    try:
+        _allowed_emails = list(st.secrets["auth"].get("allowed_emails", []))
+    except (KeyError, FileNotFoundError):
+        _allowed_emails = []
+
+    _url_token = st.query_params.get("t", "")
+    if _url_token and _allowed_emails:
+        for _em in _allowed_emails:
+            if _auth_token(_em, _auth_pw) == _url_token:
+                st.session_state["_authenticated"] = True
+                st.session_state["_auth_email"] = _em
+                return True
+
     st.markdown(
-        "<div style='text-align:center; padding-top:80px'>",
+        "<div style=\'text-align:center; padding-top:80px\'>",
         unsafe_allow_html=True,
     )
     st.title("☀️ 提案資料ジェネレーター")
@@ -67,18 +96,15 @@ def _check_auth() -> bool:
         _submit = st.form_submit_button("ログイン", use_container_width=True)
 
     if _submit:
-        # Check allowed emails if configured
-        try:
-            _allowed = st.secrets["auth"]["allowed_emails"]
-            if _email not in _allowed:
-                st.error("許可されていないメールアドレスです")
-                return False
-        except (KeyError, FileNotFoundError):
-            pass
+        if _allowed_emails and _email not in _allowed_emails:
+            st.error("許可されていないメールアドレスです")
+            return False
 
         if _pw == _auth_pw:
             st.session_state["_authenticated"] = True
             st.session_state["_auth_email"] = _email
+            # Persist auth in URL query param so page reload keeps user logged in
+            st.query_params["t"] = _auth_token(_email, _auth_pw)
             st.rerun()
         else:
             st.error("パスワードが正しくありません")
