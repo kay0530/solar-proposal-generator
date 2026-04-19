@@ -756,6 +756,10 @@ def _restore_widget_keys(data: dict) -> None:
     if "compass_angle" in data:
         st.session_state["compass_angle"] = data["compass_angle"]
 
+    # Restore load_calc_data from saved "load_calc" field
+    if "load_calc" in data and data["load_calc"]:
+        st.session_state["load_calc_data"] = data["load_calc"]
+
     # Restore layout image from embedded base64 data
     _img_b64 = data.get("layout_image_b64")
     if _img_b64:
@@ -1574,8 +1578,15 @@ with tab2:
                         st.json(_lc)
                 except Exception as e:
                     st.error(f"読み込みエラー: {e}")
-            else:
-                st.session_state.pop("load_calc_data", None)
+            elif st.session_state.get("load_calc_data"):
+                _lc = st.session_state["load_calc_data"]
+                st.info(
+                    f"読み込み済: 総重量 {_lc.get('total_weight_kg', 0):,.0f}kg / "
+                    f"積載荷重 {_lc.get('load_per_roof_area', 0):.2f}kg/m²"
+                )
+                if st.button("計算データをクリア", key="_clear_load_calc"):
+                    st.session_state.pop("load_calc_data", None)
+                    st.rerun()
 
     # ----- iPals upload -----
     with st.expander("📊 iPals発電シミュレーション", expanded=False):
