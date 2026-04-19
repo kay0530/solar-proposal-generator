@@ -153,8 +153,8 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     y += Inches(0.22)
     h -= Inches(0.22)
 
-    # Sample down to ~56 points
-    step = max(1, len(values) // 56) if values else 1
+    # Use full hourly resolution
+    step = 1 if len(values) <= 360 else max(1, len(values) // 336)
     sampled_labels = labels[::step]
     sampled_values = values[::step]
     sampled_self_c = self_c_values[::step]
