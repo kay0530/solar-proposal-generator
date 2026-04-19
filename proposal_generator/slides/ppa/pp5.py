@@ -267,8 +267,6 @@ def _render_compass_indicator(slide, angle: int,
     All compass shapes are grouped into a single p:grpSp element.
     """
     from pptx.enum.shapes import MSO_SHAPE
-    from pptx.oxml import OxmlElement
-    from pptx.oxml.ns import qn
     import math
 
     box_w = Inches(1.1)
@@ -279,9 +277,6 @@ def _render_compass_indicator(slide, angle: int,
     else:
         box_x = SLIDE_W - MARGIN - box_w
         box_y = CONTENT_TOP + Inches(0.05)
-
-    # Track shapes for grouping
-    _n_before = len(slide.shapes)
 
     # White background box with border
     add_rounded_rect(
@@ -391,43 +386,3 @@ def _render_compass_indicator(slide, angle: int,
         font_color=C_SUB, align=PP_ALIGN.CENTER,
     )
 
-    # Group all compass shapes
-    _compass_shapes = list(slide.shapes)[_n_before:]
-    if len(_compass_shapes) > 1:
-        spTree = slide.shapes._spTree
-        grpSp = OxmlElement('p:grpSp')
-        # Non-visual properties
-        nvGrpSpPr = OxmlElement('p:nvGrpSpPr')
-        cNvPr = OxmlElement('p:cNvPr')
-        _max_id = max(
-            (int(el.get('id', '0'))
-             for el in spTree.iter(qn('p:cNvPr'))),
-            default=0,
-        )
-        cNvPr.set('id', str(_max_id + 1))
-        cNvPr.set('name', 'Compass Group')
-        nvGrpSpPr.append(cNvPr)
-        nvGrpSpPr.append(OxmlElement('p:cNvGrpSpPr'))
-        nvGrpSpPr.append(OxmlElement('p:nvPr'))
-        grpSp.append(nvGrpSpPr)
-        # Group transform
-        grpSpPr = OxmlElement('p:grpSpPr')
-        xfrm = OxmlElement('a:xfrm')
-        for tag, attrs in [
-            ('a:off', {'x': str(int(box_x)), 'y': str(int(box_y))}),
-            ('a:ext', {'cx': str(int(box_w)), 'cy': str(int(box_h))}),
-            ('a:chOff', {'x': str(int(box_x)), 'y': str(int(box_y))}),
-            ('a:chExt', {'cx': str(int(box_w)), 'cy': str(int(box_h))}),
-        ]:
-            el = OxmlElement(tag)
-            for k, v in attrs.items():
-                el.set(k, v)
-            xfrm.append(el)
-        grpSpPr.append(xfrm)
-        grpSp.append(grpSpPr)
-        # Move shapes into group
-        for shape in _compass_shapes:
-            el = shape._element
-            spTree.remove(el)
-            grpSp.append(el)
-        spTree.append(grpSp)

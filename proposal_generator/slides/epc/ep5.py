@@ -145,6 +145,7 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     """Add a line chart showing demand profile with a peak reference line."""
     labels = [d["label"] for d in chart_data_list]
     values = [d["value"] for d in chart_data_list]
+    self_c_values = [d.get("self_c", 0) for d in chart_data_list]
 
     add_textbox(slide, x, y, w, Inches(0.22),
                 f"◆ {title}",
@@ -152,23 +153,18 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     y += Inches(0.22)
     h -= Inches(0.22)
 
-    # Sample down to reduce chart data points
-    step = max(1, len(values) // 112) if values else 1
+    # Sample down to ~56 points
+    step = max(1, len(values) // 56) if values else 1
     sampled_labels = labels[::step]
     sampled_values = values[::step]
+    sampled_self_c = self_c_values[::step]
 
     cd = CategoryChartData()
-    display_labels = []
-    for i, lbl in enumerate(sampled_labels):
-        if " " in lbl and lbl.endswith(" 0:00"):
-            display_labels.append(lbl.split(" ")[0])
-        else:
-            display_labels.append("")
-    if display_labels and not display_labels[0] and sampled_labels:
-        display_labels[0] = sampled_labels[0].split(" ")[0]
+    display_labels = [lbl.split(" ")[0] if " " in lbl else lbl for lbl in sampled_labels]
     cd.categories = display_labels
 
     cd.add_series("使用電力量 (kW)", sampled_values)
+    cd.add_series("自家消費量 (kW)", sampled_self_c)
     cd.add_series("ピークライン", [peak_kw] * len(sampled_values))
 
     chart_frame = slide.shapes.add_chart(
@@ -186,7 +182,12 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     series_demand.format.line.width = Pt(1.5)
     series_demand.smooth = False
 
-    series_peak = plot.series[1]
+    series_self_c = plot.series[1]
+    series_self_c.format.line.color.rgb = RGBColor(0xE8, 0x49, 0x0F)
+    series_self_c.format.line.width = Pt(1.0)
+    series_self_c.smooth = False
+
+    series_peak = plot.series[2]
     series_peak.format.line.color.rgb = RGBColor(0xFF, 0x00, 0x00)
     series_peak.format.line.width = Pt(1.0)
     series_peak.format.line.dash_style = MSO_LINE_DASH_STYLE.DASH

@@ -72,61 +72,68 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
 
     y = CONTENT_TOP + Inches(0.05)
 
-    # ---- KPI cards (3 columns) ----
+    # ---- Header + 4-column row: 3 KPI cards + savings box ----
     add_section_header(slide, MARGIN, y, Inches(5.0), "デマンドカット効果")
     y += Inches(0.4)
 
-    card_cols = 3
-    gap = Inches(0.2)
-    card_w = (SLIDE_W - MARGIN * 2 - gap * (card_cols - 1)) / card_cols
+    # Split row: 3 KPI cards take ~55% width, savings box takes ~45%
+    gap = Inches(0.15)
+    total_w = SLIDE_W - MARGIN * 2
+    kpi_area_w = total_w * 0.45
+    savings_area_w = total_w * 0.55 - gap
+    card_w = (kpi_area_w - gap * 2) / 3
     card_h = Inches(1.1)
 
     add_kpi_card(slide, MARGIN, y, card_w, card_h,
                  f"{fmt_num(peak_before, 0)}", "kW",
                  "①導入前ピークデマンド",
-                 bg_color=C_LIGHT_GRAY, number_size_pt=30)
+                 bg_color=C_LIGHT_GRAY, number_size_pt=24)
 
     add_kpi_card(slide, MARGIN + card_w + gap, y, card_w, card_h,
                  f"{fmt_num(peak_after, 0)}", "kW",
                  "②導入後ピークデマンド",
-                 bg_color=C_LIGHT_GRAY, number_size_pt=30)
+                 bg_color=C_LIGHT_GRAY, number_size_pt=24)
 
     add_kpi_card(slide, MARGIN + (card_w + gap) * 2, y, card_w, card_h,
                  f"▲{fmt_num(demand_cut, 0)}", "kW",
                  "デマンド削減量",
-                 bg_color=C_LIGHT_ORANGE, number_size_pt=30)
+                 bg_color=C_LIGHT_ORANGE, number_size_pt=24)
 
-    y += card_h + Inches(0.2)
+    # Savings box (right side of KPI row)
+    savings_x = MARGIN + kpi_area_w + gap
+    savings_h = card_h
+    add_rounded_rect(slide, savings_x, y, savings_area_w, savings_h, C_LIGHT_ORANGE)
+    add_rect(slide, savings_x, y, Inches(0.06), savings_h, C_ORANGE)
 
-    # ---- Basic fee savings box ----
-    savings_w = SLIDE_W - MARGIN * 2
-    savings_h = Inches(1.2)
-    add_rounded_rect(slide, MARGIN, y, savings_w, savings_h, C_LIGHT_ORANGE)
-    add_rect(slide, MARGIN, y, Inches(0.08), savings_h, C_ORANGE)
-
-    add_textbox(slide, MARGIN + Inches(0.2), y + Inches(0.08),
-                Inches(4.0), Inches(0.25),
+    # Label + amount (left half of savings box)
+    amount_w = savings_area_w * 0.45
+    add_textbox(slide, savings_x + Inches(0.15), y + Inches(0.06),
+                amount_w, Inches(0.22),
                 "基本料金削減効果",
-                font_name=FONT_BODY, font_size_pt=12, font_color=C_DARK, bold=True)
+                font_name=FONT_BODY, font_size_pt=10, font_color=C_DARK, bold=True)
+    add_textbox(slide, savings_x + Inches(0.15), y + Inches(0.30),
+                amount_w, Inches(0.55),
+                fmt_yen(annual_saving) + "/年",
+                font_name=FONT_BLACK, font_size_pt=24, font_color=C_ORANGE, bold=True)
 
-    add_textbox(slide, MARGIN + Inches(0.2), y + Inches(0.35),
-                Inches(4.5), Inches(0.6),
-                fmt_yen(annual_saving) + " /年",
-                font_name=FONT_BLACK, font_size_pt=34, font_color=C_ORANGE, bold=True)
-
-    # Calculation detail (right side)
+    # Calc detail (right half of savings box)
     calc_text = (
         f"基本料金単価: {fmt_num(basic_rate, 1)} 円/kW × 力率補正: {pf_factor:.2f}\n"
         f"月額削減: ▲{fmt_num(demand_cut, 0)} kW × {fmt_num(basic_rate, 1)} 円 × {pf_factor:.2f}\n"
         f"        = {fmt_yen(monthly_saving)}/月\n"
         f"年間削減: {fmt_yen(monthly_saving)} × 12 = {fmt_yen(annual_saving)}/年"
     )
-    add_textbox(slide, MARGIN + Inches(5.2), y + Inches(0.12),
-                Inches(5.5), Inches(1.0),
+    calc_x = savings_x + amount_w + Inches(0.1)
+    calc_w = savings_area_w - amount_w - Inches(0.25)
+    add_textbox(slide, calc_x, y + Inches(0.08),
+                calc_w, Inches(1.0),
                 calc_text,
-                font_name=FONT_BODY, font_size_pt=9, font_color=C_SUB)
+                font_name=FONT_BODY, font_size_pt=7, font_color=C_SUB)
 
-    y += savings_h + Inches(0.15)
+    y += card_h + Inches(0.15)
+
+    # Keep savings_w var defined for fallback text message below
+    savings_w = total_w
 
     # ---- Line charts (2 panels: before / after) ----
     if chart_before and chart_after:
@@ -150,9 +157,10 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
 def _add_demand_chart(slide, x, y, w, h, title: str,
                       chart_data_list: list[dict], peak_kw: float) -> None:
     """Add a line chart showing demand profile with a peak reference line."""
-    # Subsample labels to avoid overcrowding (show every 24th = daily)
+    # Extract data arrays
     labels = [d["label"] for d in chart_data_list]
     values = [d["value"] for d in chart_data_list]
+    self_c_values = [d.get("self_c", 0) for d in chart_data_list]
 
     # Chart title
     add_textbox(slide, x, y, w, Inches(0.22),
@@ -161,25 +169,19 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     y += Inches(0.22)
     h -= Inches(0.22)
 
-    # Sample down to reduce chart data points (every 3 hours = 112 points max)
-    step = max(1, len(values) // 112) if values else 1
+    # Sample down to ~56 points (every 6 hours)
+    step = max(1, len(values) // 56) if values else 1
     sampled_labels = labels[::step]
     sampled_values = values[::step]
+    sampled_self_c = self_c_values[::step]
 
     cd = CategoryChartData()
-    # Use date labels on daily boundaries, empty strings between
-    display_labels = []
-    for i, lbl in enumerate(sampled_labels):
-        if " " in lbl and lbl.endswith(" 0:00"):
-            display_labels.append(lbl.split(" ")[0])
-        else:
-            display_labels.append("")
-    # Ensure at least first label is shown
-    if display_labels and not display_labels[0] and sampled_labels:
-        display_labels[0] = sampled_labels[0].split(" ")[0]
+    # Show date on every label - powerpoint will auto-thin ticks
+    display_labels = [lbl.split(" ")[0] if " " in lbl else lbl for lbl in sampled_labels]
     cd.categories = display_labels
 
     cd.add_series("使用電力量 (kW)", sampled_values)
+    cd.add_series("自家消費量 (kW)", sampled_self_c)
     cd.add_series("ピークライン", [peak_kw] * len(sampled_values))
 
     chart_frame = slide.shapes.add_chart(
@@ -190,7 +192,7 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     chart.legend.position = XL_LEGEND_POSITION.BOTTOM
     chart.legend.include_in_layout = False
 
-    # Style: demand line = navy, peak line = red
+    # Style: demand=navy, self_c=orange, peak=red dashed
     from pptx.dml.color import RGBColor
     plot = chart.plots[0]
     series_demand = plot.series[0]
@@ -198,7 +200,12 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     series_demand.format.line.width = Pt(1.5)
     series_demand.smooth = False
 
-    series_peak = plot.series[1]
+    series_self_c = plot.series[1]
+    series_self_c.format.line.color.rgb = RGBColor(0xE8, 0x49, 0x0F)  # orange
+    series_self_c.format.line.width = Pt(1.0)
+    series_self_c.smooth = False
+
+    series_peak = plot.series[2]
     series_peak.format.line.color.rgb = RGBColor(0xFF, 0x00, 0x00)  # red
     series_peak.format.line.width = Pt(1.0)
     series_peak.format.line.dash_style = MSO_LINE_DASH_STYLE.DASH

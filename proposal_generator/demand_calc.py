@@ -120,7 +120,11 @@ def _select_peak_weeks(
         demand = float(row.get("demand_kw", 0) or 0)
         self_c = float(row.get("self_consumption_kw", 0) or 0)
         label = f"{int(row.get('month', 0))}/{int(row.get('day', 0))} {int(row.get('hour', 0))}:00"
-        before_window.append({"label": label, "value": demand})
-        after_window.append({"label": label, "value": max(0, demand - self_c)})
+        before_window.append({
+            "label": label, "value": demand, "self_c": self_c,
+        })
+        after_window.append({
+            "label": label, "value": max(0, demand - self_c), "self_c": self_c,
+        })
 
     return before_window, after_window
