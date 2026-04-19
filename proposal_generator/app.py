@@ -730,6 +730,24 @@ def _restore_widget_keys(data: dict) -> None:
         if src in data and data[src] is not None:
             st.session_state[dst] = data[src]
 
+    # Restore equipment lists (panels / pcs / batteries) via quote applier
+    # so manual-mode widget keys get populated (panel_model_i etc.)
+    if any(k in data for k in ("panels", "pcs_list", "batteries")):
+        _quote_like = {
+            "panels": data.get("panels", []),
+            "pcs_list": data.get("pcs_list", []),
+            "batteries": data.get("batteries", []),
+            "kw_unit_cost": data.get("kw_unit_cost", 0),
+            "gross_margin_pct": data.get("gross_margin_pct", 0),
+            "commission_rate": data.get("sales_commission_pct", 0),
+            "selling_price": data.get("selling_price", 0),
+            "raw_cost": data.get("raw_cost", 0),
+        }
+        try:
+            _apply_quote_to_session(_quote_like)
+        except Exception:
+            pass
+
     # Restore additional fields not in _DIRECT
     if "snow_depth" in data:
         st.session_state["snow_depth"] = data["snow_depth"]
@@ -737,6 +755,22 @@ def _restore_widget_keys(data: dict) -> None:
         st.session_state["site_survey"] = data["site_survey"]
     if "compass_angle" in data:
         st.session_state["compass_angle"] = data["compass_angle"]
+
+    # Restore layout image from embedded base64 data
+    _img_b64 = data.get("layout_image_b64")
+    if _img_b64:
+        import base64 as _b64
+        import tempfile as _tmp_img
+        try:
+            _raw = _b64.b64decode(_img_b64)
+            _ext = data.get("layout_image_ext", ".png")
+            _p = Path(_tmp_img.mktemp(suffix=_ext))
+            _p.write_bytes(_raw)
+            st.session_state["layout_image_path"] = str(_p)
+            st.session_state["layout_image_b64"] = _img_b64
+            st.session_state["layout_image_ext"] = _ext
+        except Exception:
+            pass
     if "battery_price" in data or "battery_selling_price" in data:
         _bp = data.get("battery_price") or data.get("battery_selling_price", 0)
         if _bp:
@@ -1470,13 +1504,26 @@ with tab2:
             if _layout_img is not None:
                 st.image(_layout_img, caption="レイアウト画像プレビュー", use_container_width=True)
                 # Save to temp file for PPTX generation
+                import base64 as _b64_img
                 import tempfile as _tmp_layout
                 _ext = Path(_layout_img.name).suffix or ".png"
+                _bytes = _layout_img.getvalue()
                 _tmp_path = Path(_tmp_layout.mktemp(suffix=_ext))
-                _tmp_path.write_bytes(_layout_img.getvalue())
+                _tmp_path.write_bytes(_bytes)
                 st.session_state["layout_image_path"] = str(_tmp_path)
-            else:
-                st.session_state.pop("layout_image_path", None)
+                st.session_state["layout_image_b64"] = _b64_img.b64encode(_bytes).decode("ascii")
+                st.session_state["layout_image_ext"] = _ext
+            elif st.session_state.get("layout_image_path") and Path(st.session_state["layout_image_path"]).exists():
+                # Preview persisted image (loaded from saved JSON)
+                st.image(
+                    st.session_state["layout_image_path"],
+                    caption="レイアウト画像 (保存済)",
+                    use_container_width=True,
+                )
+                if st.button("画像をクリア", key="_clear_layout_img"):
+                    for _k in ("layout_image_path", "layout_image_b64", "layout_image_ext"):
+                        st.session_state.pop(_k, None)
+                    st.rerun()
 
             # Compass angle selector: slider + interactive SVG
             _angle = st.select_slider(
@@ -2418,10 +2465,16 @@ with tab2:
                 })
             st.session_state["customer_data"]["hourly_rows"] = _hourly_rows
 
-    # Merge layout image path and load calc data if available
+    # Merge layout image path and embedded data for JSON persistence
     _layout_path = st.session_state.get("layout_image_path")
     if _layout_path:
         st.session_state["customer_data"]["layout_image_path"] = _layout_path
+    _layout_b64 = st.session_state.get("layout_image_b64")
+    if _layout_b64:
+        st.session_state["customer_data"]["layout_image_b64"] = _layout_b64
+        st.session_state["customer_data"]["layout_image_ext"] = (
+            st.session_state.get("layout_image_ext", ".png")
+        )
     _lc_data = st.session_state.get("load_calc_data")
     if _lc_data:
         st.session_state["customer_data"]["load_calc"] = _lc_data
