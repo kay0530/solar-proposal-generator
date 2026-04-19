@@ -262,15 +262,21 @@ def _angle_label(angle: int) -> str:
 
 def _render_compass_indicator(slide, angle: int,
                               img_right=None, img_top=None) -> None:
-    """Draw a compass rose indicator near the image upper-right corner.
+    """Draw a dark-themed compass rose matching the Streamlit UI style.
 
-    All compass shapes are grouped into a single p:grpSp element.
+    Features:
+    - Dark navy filled circle
+    - Light grey 8-spoke crosshair (fixed orientation)
+    - Cardinal labels: N (red), E/S/W (light grey) at circle edge
+    - Orange arrow (isosceles triangle) rotated by angle
+    - Grey counter-arrow pointing opposite direction
+    - Bottom label: "XX° - direction"
     """
     from pptx.enum.shapes import MSO_SHAPE
     import math
 
     box_w = Inches(1.1)
-    box_h = Inches(1.2)
+    box_h = Inches(1.3)
     if img_right is not None and img_top is not None:
         box_x = img_right - box_w - Inches(0.1)
         box_y = img_top + Inches(0.1)
@@ -278,47 +284,38 @@ def _render_compass_indicator(slide, angle: int,
         box_x = SLIDE_W - MARGIN - box_w
         box_y = CONTENT_TOP + Inches(0.05)
 
-    # White background box with border
-    add_rounded_rect(
-        slide, box_x, box_y, box_w, box_h,
-        C_WHITE, radius_pt=6.0,
-        border_color=C_BORDER, border_pt=0.75,
-    )
-
-    # Center of compass within box
+    # Compass center + radius
     cx = box_x + box_w / 2
-    cy = box_y + Inches(0.52)
-    r_outer = Inches(0.32)  # outer circle radius
-    r_inner = Inches(0.05)  # inner dot radius
+    cy = box_y + Inches(0.55)
+    r_outer = Inches(0.45)
 
-    # Outer circle
-    oval = slide.shapes.add_shape(
+    # Colors (dark theme)
+    C_COMPASS_BG = RGBColor(0x1E, 0x22, 0x2E)
+    C_COMPASS_STROKE = RGBColor(0x3A, 0x3F, 0x4E)
+    C_COMPASS_SPOKE = RGBColor(0x55, 0x5A, 0x68)
+    C_COMPASS_N = RGBColor(0xE8, 0x49, 0x0F)
+    C_COMPASS_CARDINAL = RGBColor(0xB8, 0xBC, 0xC6)
+    C_COMPASS_ARROW_BACK = RGBColor(0x7A, 0x7E, 0x8C)
+
+    # 1. Dark filled circle (background)
+    bg = slide.shapes.add_shape(
         MSO_SHAPE.OVAL,
         int(cx - r_outer), int(cy - r_outer),
         int(r_outer * 2), int(r_outer * 2),
     )
-    oval.fill.background()
-    oval.line.color.rgb = RGBColor(0x66, 0x66, 0x66)
-    oval.line.width = Pt(0.75)
+    bg.fill.solid()
+    bg.fill.fore_color.rgb = C_COMPASS_BG
+    bg.line.color.rgb = C_COMPASS_STROKE
+    bg.line.width = Pt(0.75)
 
-    # Inner dot
-    dot = slide.shapes.add_shape(
-        MSO_SHAPE.OVAL,
-        int(cx - r_inner), int(cy - r_inner),
-        int(r_inner * 2), int(r_inner * 2),
-    )
-    dot.fill.solid()
-    dot.fill.fore_color.rgb = RGBColor(0x66, 0x66, 0x66)
-    dot.line.fill.background()
-
-    # Cross-hair lines (8 directions, rotated by angle)
+    # 2. 8-spoke crosshair (fixed orientation)
     for i in range(8):
-        dir_angle = angle + i * 45
+        dir_angle = i * 45
         rad = math.radians(dir_angle)
         is_cardinal = (i % 2 == 0)
-        r_start = Inches(0.08) if is_cardinal else Inches(0.12)
-        r_end = r_outer - Inches(0.02)
-        line_w = Pt(1.0) if is_cardinal else Pt(0.5)
+        r_start = Inches(0.04)
+        r_end = r_outer - Inches(0.04)
+        line_w = Pt(0.5) if is_cardinal else Pt(0.35)
 
         x1 = cx + r_start * math.sin(rad)
         y1 = cy - r_start * math.cos(rad)
@@ -326,63 +323,64 @@ def _render_compass_indicator(slide, angle: int,
         y2 = cy - r_end * math.cos(rad)
 
         connector = slide.shapes.add_connector(
-            1,  # MSO_CONNECTOR_TYPE.STRAIGHT
-            int(x1), int(y1), int(x2), int(y2),
+            1, int(x1), int(y1), int(x2), int(y2),
         )
-        connector.line.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        connector.line.color.rgb = C_COMPASS_SPOKE
         connector.line.width = line_w
 
-    # North arrow (extending beyond circle)
-    rad_n = math.radians(angle)
-    arrow_len = Inches(0.48)
+    # 3. Cardinal labels (N/E/S/W) at circle edge
+    label_r = r_outer - Inches(0.11)
+    label_box = Inches(0.16)
+    cardinals = [
+        ("N", 0, C_COMPASS_N),
+        ("E", 90, C_COMPASS_CARDINAL),
+        ("S", 180, C_COMPASS_CARDINAL),
+        ("W", 270, C_COMPASS_CARDINAL),
+    ]
+    for lbl, ang, col in cardinals:
+        rad = math.radians(ang)
+        lx = cx + label_r * math.sin(rad) - label_box / 2
+        ly = cy - label_r * math.cos(rad) - label_box / 2
+        add_textbox(
+            slide, int(lx), int(ly), int(label_box), int(label_box),
+            lbl, font_name=FONT_BLACK, font_size_pt=7,
+            font_color=col, bold=True, align=PP_ALIGN.CENTER,
+        )
 
-    # Arrow line from center outward
-    ax1 = cx
-    ay1 = cy
-    ax2 = cx + arrow_len * math.sin(rad_n)
-    ay2 = cy - arrow_len * math.cos(rad_n)
+    # 4. Arrow (orange) + counter-arrow (grey)
+    # Both triangles bbox-centered at (cx, cy) so rotation pivots correctly
+    arrow_w = Inches(0.14)
+    arrow_h = Inches(0.58)
 
-    arrow_line = slide.shapes.add_connector(
-        1, int(ax1), int(ay1), int(ax2), int(ay2),
-    )
-    arrow_line.line.color.rgb = C_ORANGE
-    arrow_line.line.width = Pt(2.0)
-
-    # North pointer triangle at arrow tip
-    # Position triangle center along arrow direction so base touches tip
-    tri_size = Inches(0.15)
-    tri_offset = tri_size / 2
-    tri_cx = ax2 + tri_offset * math.sin(rad_n)
-    tri_cy = ay2 - tri_offset * math.cos(rad_n)
-    tri = slide.shapes.add_shape(
+    # Grey counter-arrow first (so orange draws on top)
+    back = slide.shapes.add_shape(
         MSO_SHAPE.ISOSCELES_TRIANGLE,
-        int(tri_cx - tri_size / 2), int(tri_cy - tri_size / 2),
-        int(tri_size), int(tri_size),
+        int(cx - arrow_w / 2), int(cy - arrow_h / 2),
+        int(arrow_w), int(arrow_h),
     )
-    tri.fill.solid()
-    tri.fill.fore_color.rgb = C_ORANGE
-    tri.line.fill.background()
-    tri.rotation = float(angle)
+    back.fill.solid()
+    back.fill.fore_color.rgb = C_COMPASS_ARROW_BACK
+    back.line.fill.background()
+    back.rotation = float((angle + 180) % 360)
 
-    # "真��" label near arrow tip
-    label_offset = Inches(0.22)
-    lx = tri_cx + label_offset * math.sin(rad_n) - Inches(0.2)
-    ly = tri_cy - label_offset * math.cos(rad_n) - Inches(0.08)
-    add_textbox(
-        slide, int(lx), int(ly), Inches(0.4), Inches(0.16),
-        "真北",
-        font_name=FONT_BODY, font_size_pt=7,
-        font_color=RGBColor(0x33, 0x33, 0x33), bold=True,
-        align=PP_ALIGN.CENTER,
+    # Orange arrow pointing to rotated north
+    arrow = slide.shapes.add_shape(
+        MSO_SHAPE.ISOSCELES_TRIANGLE,
+        int(cx - arrow_w / 2), int(cy - arrow_h / 2),
+        int(arrow_w), int(arrow_h),
     )
+    arrow.fill.solid()
+    arrow.fill.fore_color.rgb = C_COMPASS_N
+    arrow.line.fill.background()
+    arrow.rotation = float(angle)
 
-    # Angle / direction label at bottom
+    # 5. Bottom label: "40° - 北東"
     label = _angle_label(angle)
     add_textbox(
-        slide, box_x, box_y + Inches(0.95),
+        slide, box_x, box_y + Inches(1.05),
         box_w, Inches(0.20),
-        f"角度 {angle}° ({label})",
-        font_name=FONT_BODY, font_size_pt=8,
-        font_color=C_SUB, align=PP_ALIGN.CENTER,
+        f"{angle}° – {label}",
+        font_name=FONT_BODY, font_size_pt=9,
+        font_color=C_DARK, bold=True, align=PP_ALIGN.CENTER,
     )
 
