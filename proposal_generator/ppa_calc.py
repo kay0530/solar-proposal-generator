@@ -17,7 +17,7 @@ Key assumptions:
   - For bank loan: worst DSCR could be any year (costs decline but so does generation)
 
 Finance rate defaults (from ファイナンスシート):
-  - シーエナジー (CE): 6.00% lease rate (CE IRR ≈ 3.10% is a result, not input)
+  - シーエナジー (CE): 6.00% lease rate (CE IRR ≈ 3.50% is a result, not input)
   - みずほリース:      5.50% fixed
   - 群馬銀行:          1.80% bank loan
 """
@@ -51,7 +51,7 @@ DEFAULT_RATE_MAP: dict[str, float] = {
 # CE (シーエナジー) target IRR
 # CE invests selling_price, receives lease payments based on principal (= selling_price - subsidy).
 # The lease rate is goal-seeked so CE's IRR on selling_price ≈ this target.
-CE_TARGET_IRR = 0.0310  # 3.10%
+CE_TARGET_IRR = 0.0350  # 3.50%
 
 # Keep backward compatibility alias
 LEASE_RATE_MAP = DEFAULT_RATE_MAP

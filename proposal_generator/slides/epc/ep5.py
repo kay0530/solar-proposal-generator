@@ -152,20 +152,27 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     y += Inches(0.22)
     h -= Inches(0.22)
 
+    # Sample down to reduce chart data points
+    step = max(1, len(values) // 112) if values else 1
+    sampled_labels = labels[::step]
+    sampled_values = values[::step]
+
     cd = CategoryChartData()
     display_labels = []
-    for i, lbl in enumerate(labels):
-        if i % 24 == 0:
-            display_labels.append(lbl.split(" ")[0] if " " in lbl else lbl)
+    for i, lbl in enumerate(sampled_labels):
+        if " " in lbl and lbl.endswith(" 0:00"):
+            display_labels.append(lbl.split(" ")[0])
         else:
             display_labels.append("")
+    if display_labels and not display_labels[0] and sampled_labels:
+        display_labels[0] = sampled_labels[0].split(" ")[0]
     cd.categories = display_labels
 
-    cd.add_series("使用電力量 (kW)", values)
-    cd.add_series("ピークライン", [peak_kw] * len(values))
+    cd.add_series("使用電力量 (kW)", sampled_values)
+    cd.add_series("ピークライン", [peak_kw] * len(sampled_values))
 
     chart_frame = slide.shapes.add_chart(
-        XL_CHART_TYPE.LINE, x, y, w, h, cd
+        XL_CHART_TYPE.LINE, int(x), int(y), int(w), int(h), cd
     )
     chart = chart_frame.chart
     chart.has_legend = True
@@ -191,4 +198,4 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
 
     cat_axis = chart.category_axis
     cat_axis.tick_labels.font.size = Pt(7)
-    cat_axis.tick_label_position = XL_TICK_LABEL_POSITION.LOW
+    # cat_axis.tick_label_position left at default
