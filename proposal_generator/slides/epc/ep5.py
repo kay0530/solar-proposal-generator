@@ -160,7 +160,16 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     sampled_self_c = self_c_values[::step]
 
     cd = CategoryChartData()
-    display_labels = [lbl.split(" ")[0] if " " in lbl else lbl for lbl in sampled_labels]
+    # Show date only on first sample of each day to avoid duplicates
+    display_labels = []
+    _last_date = None
+    for lbl in sampled_labels:
+        _date = lbl.split(" ")[0] if " " in lbl else lbl
+        if _date != _last_date:
+            display_labels.append(_date)
+            _last_date = _date
+        else:
+            display_labels.append("")
     cd.categories = display_labels
 
     cd.add_series("使用電力量 (kW)", sampled_values)
@@ -193,10 +202,53 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
     series_peak.format.line.dash_style = MSO_LINE_DASH_STYLE.DASH
     series_peak.smooth = False
 
+    # Convert self_c series into areaChart (filled area under line)
+    try:
+        from pptx.oxml.ns import qn
+        from lxml import etree as _etree
+        _chartSpace = chart._chartSpace
+        _ns = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+        _a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        _plotArea = _chartSpace.find(f".//{{{_ns}}}plotArea")
+        _lineChart = _plotArea.find(f"{{{_ns}}}lineChart")
+        _sers = _lineChart.findall(f"{{{_ns}}}ser")
+        _self_c_ser = _sers[1]
+        _lineChart.remove(_self_c_ser)
+        _areaChart = _etree.fromstring(
+            f'<c:areaChart xmlns:c="{_ns}" xmlns:a="{_a_ns}">'
+            f'<c:grouping val="standard"/><c:varyColors val="0"/>'
+            f'</c:areaChart>'
+        )
+        _spPr_new = _etree.fromstring(
+            f'<c:spPr xmlns:c="{_ns}" xmlns:a="{_a_ns}">'
+            f'<a:solidFill><a:srgbClr val="E8490F"><a:alpha val="55000"/></a:srgbClr></a:solidFill>'
+            f'<a:ln><a:solidFill><a:srgbClr val="E8490F"/></a:solidFill></a:ln>'
+            f'</c:spPr>'
+        )
+        _existing_spPr = _self_c_ser.find(f"{{{_ns}}}spPr")
+        if _existing_spPr is not None:
+            _self_c_ser.remove(_existing_spPr)
+        _tx = _self_c_ser.find(f"{{{_ns}}}tx")
+        if _tx is not None:
+            _tx.addnext(_spPr_new)
+        else:
+            _self_c_ser.insert(0, _spPr_new)
+        _areaChart.append(_self_c_ser)
+        for _axId in _lineChart.findall(f"{{{_ns}}}axId"):
+            _areaChart.append(_etree.fromstring(_etree.tostring(_axId)))
+        _lineChart.addprevious(_areaChart)
+    except Exception:
+        pass
+
     value_axis = chart.value_axis
     value_axis.has_title = False
     value_axis.major_gridlines.format.line.color.rgb = RGBColor(0xE0, 0xE0, 0xE0)
+    value_axis.tick_labels.font.size = Pt(9)
 
     cat_axis = chart.category_axis
     cat_axis.tick_labels.font.size = Pt(7)
     # cat_axis.tick_label_position left at default
+    try:
+        chart.legend.font.size = Pt(10.5)
+    except Exception:
+        pass
