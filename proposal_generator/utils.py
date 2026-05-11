@@ -57,6 +57,29 @@ FOOTER_H = Inches(0.28)
 CONTENT_TOP = HEADER_H + Inches(0.12)
 CONTENT_H   = SLIDE_H - HEADER_H - FOOTER_H - Inches(0.24)
 
+# Typography scale (point sizes)
+SIZE_HERO    = 48      # Hero numbers (summary, cover)
+SIZE_H1      = 24      # Major slide titles
+SIZE_H2      = 18      # Subsection / subhead
+SIZE_H3      = 14      # Section header
+SIZE_BODY_LG = 12      # Emphasized body
+SIZE_BODY    = 11      # Default body
+SIZE_CAPTION = 9       # Labels, captions
+SIZE_SMALL   = 8       # Footer, fine print
+SIZE_XS      = 7       # Very small (dense tables)
+
+# Spacing scale
+GAP_XS = Inches(0.05)
+GAP_SM = Inches(0.10)
+GAP_MD = Inches(0.20)
+GAP_LG = Inches(0.40)
+GAP_XL = Inches(0.60)
+
+# Extended palette
+C_ORANGE_DARK = RGBColor(0xC5, 0x3D, 0x0A)   # darker orange for accents
+C_NAVY_LIGHT  = RGBColor(0x1A, 0x3D, 0x80)   # lighter navy
+C_BG_SOFT     = RGBColor(0xFA, 0xFA, 0xFA)   # very light background
+
 
 # ---------------------------------------------------------------------------
 # Template helpers
@@ -335,35 +358,58 @@ def add_section_header(slide, x, y, w, text: str, font_size_pt: float = 14):
 def add_kpi_card(slide, x, y, w, h,
                  number: str, unit: str, label: str,
                  bg_color: RGBColor = C_LIGHT_ORANGE,
-                 number_size_pt: float = 36):
-    """KPI card with large number, unit, and label."""
-    add_rounded_rect(slide, x, y, w, h, bg_color)
-    # Number (large)
+                 number_size_pt: float = 36,
+                 accent_color: Optional[RGBColor] = None,
+                 accent_bar: bool = True):
+    """KPI card with optional top accent bar, large number, unit, and label.
+
+    Args:
+        accent_color: Color for number + accent bar. Defaults to C_ORANGE.
+        accent_bar: If True, draw a thin accent bar at the top of the card.
+    """
+    if accent_color is None:
+        accent_color = C_ORANGE
+
+    # Background card with subtle rounded corners
+    add_rounded_rect(slide, x, y, w, h, bg_color, radius_pt=8.0)
+
+    # Top accent bar (3pt height, slightly inset)
+    if accent_bar:
+        bar_h = Inches(0.04)
+        add_rect(slide, x + Inches(0.12), y, w - Inches(0.24), bar_h, accent_color)
+        num_y_offset = Inches(0.18)
+    else:
+        num_y_offset = Inches(0.12)
+
+    # Number (large, accent color)
     add_textbox(slide,
-                x + Inches(0.1), y + Inches(0.12),
+                x + Inches(0.1), y + num_y_offset,
                 w - Inches(0.2), Inches(0.5),
                 number,
                 font_name=FONT_BLACK,
                 font_size_pt=number_size_pt,
-                font_color=C_ORANGE,
+                font_color=accent_color,
                 bold=True,
                 align=PP_ALIGN.CENTER)
-    # Unit (small, right of number area)
+
+    # Unit (small, just below number)
+    unit_y = y + num_y_offset + Inches(0.42)
     add_textbox(slide,
-                x + Inches(0.1), y + Inches(0.5),
-                w - Inches(0.2), Inches(0.22),
+                x + Inches(0.1), unit_y,
+                w - Inches(0.2), Inches(0.20),
                 unit,
                 font_name=FONT_BODY,
-                font_size_pt=9,
+                font_size_pt=SIZE_CAPTION,
                 font_color=C_SUB,
                 align=PP_ALIGN.CENTER)
-    # Label
+
+    # Label (bottom)
     add_textbox(slide,
-                x + Inches(0.08), y + h - Inches(0.3),
+                x + Inches(0.08), y + h - Inches(0.30),
                 w - Inches(0.16), Inches(0.28),
                 label,
                 font_name=FONT_BODY,
-                font_size_pt=9,
+                font_size_pt=SIZE_CAPTION,
                 font_color=C_DARK,
                 bold=True,
                 align=PP_ALIGN.CENTER)
@@ -452,3 +498,146 @@ def fmt_num(value, decimals: int = 1, suffix: str = "") -> str:
         return f"{float(value):,.{decimals}f}{suffix}"
     except (TypeError, ValueError):
         return str(value)
+
+# ---------------------------------------------------------------------------
+# Phase 1 design system: refined components
+# ---------------------------------------------------------------------------
+
+def add_divider(slide, x, y, w,
+                color: RGBColor = C_BORDER,
+                width_pt: float = 0.5):
+    """Subtle horizontal divider line."""
+    return add_line(slide, x, y, x + w, y, color, width_pt=width_pt)
+
+
+def add_card_with_accent(slide, x, y, w, h,
+                         accent_color: RGBColor = C_ORANGE,
+                         bg_color: RGBColor = C_WHITE,
+                         border: bool = True,
+                         accent_position: str = "top"):
+    """Card with a colored accent stripe (top or left edge).
+
+    Returns the inner content area bounds (cx, cy, cw, ch) so callers can
+    place text relative to the card without colliding with the accent bar.
+    """
+    if border:
+        add_rounded_rect(slide, x, y, w, h, bg_color, radius_pt=6.0,
+                         border_color=C_BORDER, border_pt=0.5)
+    else:
+        add_rounded_rect(slide, x, y, w, h, bg_color, radius_pt=6.0)
+
+    bar_thickness = Inches(0.05)
+    if accent_position == "top":
+        add_rect(slide, x + Inches(0.10), y, w - Inches(0.20), bar_thickness, accent_color)
+        return (x, y + bar_thickness + Inches(0.06), w, h - bar_thickness - Inches(0.06))
+    elif accent_position == "left":
+        add_rect(slide, x, y + Inches(0.10), bar_thickness, h - Inches(0.20), accent_color)
+        return (x + bar_thickness + Inches(0.06), y, w - bar_thickness - Inches(0.06), h)
+    return (x, y, w, h)
+
+
+def add_metric_hero(slide, x, y, w, h,
+                    number: str, unit: str, label: str,
+                    accent_color: RGBColor = C_ORANGE,
+                    bg_color: RGBColor = C_WHITE,
+                    number_size_pt: float = SIZE_HERO):
+    """Hero-sized metric block for emphasis (summary slides)."""
+    add_rounded_rect(slide, x, y, w, h, bg_color, radius_pt=10.0,
+                     border_color=C_BORDER, border_pt=0.75)
+
+    # Top accent bar
+    bar_h = Inches(0.06)
+    add_rect(slide, x + Inches(0.18), y, w - Inches(0.36), bar_h, accent_color)
+
+    # Hero number
+    add_textbox(slide,
+                x + Inches(0.1), y + Inches(0.32),
+                w - Inches(0.2), h * 0.50,
+                number,
+                font_name=FONT_BLACK,
+                font_size_pt=number_size_pt,
+                font_color=accent_color,
+                bold=True,
+                align=PP_ALIGN.CENTER)
+
+    # Unit
+    add_textbox(slide,
+                x + Inches(0.1), y + h - Inches(0.78),
+                w - Inches(0.2), Inches(0.22),
+                unit,
+                font_name=FONT_BODY,
+                font_size_pt=SIZE_BODY,
+                font_color=C_SUB,
+                align=PP_ALIGN.CENTER)
+
+    # Divider above label
+    div_y = y + h - Inches(0.42)
+    add_divider(slide, x + Inches(0.30), div_y, w - Inches(0.60))
+
+    # Label
+    add_textbox(slide,
+                x + Inches(0.1), y + h - Inches(0.34),
+                w - Inches(0.2), Inches(0.28),
+                label,
+                font_name=FONT_BODY,
+                font_size_pt=SIZE_CAPTION,
+                font_color=C_DARK,
+                bold=True,
+                align=PP_ALIGN.CENTER)
+
+
+def add_pill_label(slide, x, y, w, h,
+                   text: str,
+                   bg_color: RGBColor = C_LIGHT_ORANGE,
+                   font_color: RGBColor = C_ORANGE,
+                   font_size_pt: float = SIZE_CAPTION):
+    """Small rounded pill badge for tags/labels."""
+    # Use large radius to make it pill-shaped (radius >= h/2)
+    add_rounded_rect(slide, x, y, w, h, bg_color, radius_pt=h / 2540 * 36)
+    add_textbox(slide, x, y, w, h,
+                text,
+                font_name=FONT_BODY,
+                font_size_pt=font_size_pt,
+                font_color=font_color,
+                bold=True,
+                align=PP_ALIGN.CENTER)
+
+
+def add_section_header_v2(slide, x, y, w,
+                          text: str,
+                          subtitle: Optional[str] = None,
+                          font_size_pt: float = SIZE_H3,
+                          underline: bool = False):
+    """Refined section header: orange left bar + title + optional subtitle/underline."""
+    border_w = Inches(0.06)
+    bar_h = Inches(0.30)
+    add_rect(slide, x, y, border_w, bar_h, C_ORANGE)
+
+    title_x = x + border_w + Inches(0.10)
+    title_w = w - border_w - Inches(0.10)
+
+    add_textbox(slide,
+                title_x, y - Inches(0.02),
+                title_w, Inches(0.32),
+                text,
+                font_name=FONT_BLACK,
+                font_size_pt=font_size_pt,
+                font_color=C_DARK,
+                bold=True)
+
+    next_y = y + Inches(0.32)
+
+    if subtitle:
+        add_textbox(slide,
+                    title_x, next_y,
+                    title_w, Inches(0.22),
+                    subtitle,
+                    font_name=FONT_BODY,
+                    font_size_pt=SIZE_CAPTION,
+                    font_color=C_SUB)
+        next_y += Inches(0.22)
+
+    if underline:
+        add_divider(slide, x, next_y + Inches(0.04), w, color=C_BORDER, width_pt=0.75)
+
+    return next_y
