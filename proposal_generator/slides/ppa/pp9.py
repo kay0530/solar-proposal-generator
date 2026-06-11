@@ -28,7 +28,7 @@ from proposal_generator.utils import (
     SIZE_SMALL, SLIDE_W,
     add_footer, add_header_bar, add_kpi_card, add_multiline_textbox,
     add_number_unit, add_rect, add_section_header, add_textbox,
-    fmt_num, fmt_yen, style_chart_base, style_series_before, vstack,
+    fmt_num, fmt_yen, style_chart_base, rotate_category_labels, style_series_before, vstack,
 )
 
 TITLE = "デマンドカット試算"
@@ -283,3 +283,4 @@ def _add_demand_chart(slide, x, y, w, h, title: str,
 
     # v2 chart chrome: frameless, dashed warm gridlines, 9pt axes/legend
     style_chart_base(chart)
+    rotate_category_labels(chart, -45)

@@ -794,10 +794,12 @@ def add_table(slide, x, y, w, rows_data: list[list],
             cell = tbl.cell(r, c)
             text = str(cell_text) if cell_text is not None else ""
             cell.text = text
-            cell.margin_left = _Pt(4)
-            cell.margin_right = _Pt(4)
+            cell.margin_left = _Pt(3)
+            cell.margin_right = _Pt(3)
             cell.margin_top = _Pt(1)
             cell.margin_bottom = _Pt(1)
+            # Never wrap mid-digit: numbers must stay on one line
+            cell.text_frame.word_wrap = False
             try:
                 cell.vertical_anchor = MSO_ANCHOR.MIDDLE
             except Exception:
@@ -889,6 +891,26 @@ def style_chart_base(chart, font_size_pt: float = SIZE_CAPTION):
         ca = chart.category_axis
         ca.format.line.color.rgb = C_HAIR
         ca.tick_labels.font.size = _Pt(font_size_pt)
+    except Exception:
+        pass
+
+
+def rotate_category_labels(chart, degrees: float = -45.0):
+    """Rotate category-axis tick labels (fixes per-character stacking when
+    categories are dense, e.g. 336 hourly points with day labels)."""
+    from lxml import etree
+    try:
+        ca = chart.category_axis
+        # Ensure txPr exists by touching the font
+        ca.tick_labels.font.size = ca.tick_labels.font.size or Pt(SIZE_CAPTION)
+        txPr = ca._element.find(qn("c:txPr"))
+        if txPr is None:
+            return
+        bodyPr = txPr.find(qn("a:bodyPr"))
+        if bodyPr is None:
+            bodyPr = etree.SubElement(txPr, qn("a:bodyPr"))
+        bodyPr.set("rot", str(int(degrees * 60000)))
+        bodyPr.set("vert", "horz")
     except Exception:
         pass
 
