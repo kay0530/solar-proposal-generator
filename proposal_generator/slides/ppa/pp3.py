@@ -1,107 +1,105 @@
 """
 pp3.py - 導入メリット（static スライド）
+
+Design v2 "Institutional Trust Grid":
+  4 merit cards in a 2x2 grid (grid cols 0-5 / 6-11 per row).
+  Each card: eyebrow tag + 14pt headline (numbers as orange runs)
+  + hairline divider + 10.5pt body. No pseudo-KPI glyphs.
 """
 from __future__ import annotations
+
 from pathlib import Path
+
 from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches
+from pptx.util import Inches, Pt
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_kpi_card,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_ORANGE,
+    FONT_BLACK, FONT_BODY,
+    LINE_SPACING_BODY, SIZE_BODY, SIZE_CAPTION, SIZE_H2,
+    add_card_with_accent, add_divider, add_footer, add_header_bar,
+    add_textbox, grid_x, grid_w, vstack,
 )
 
 TITLE = "導入メリット"
+EYEBROW = "01｜導入の背景"
 
+# headline: list of (text, is_number) — number segments render orange
 MERITS = [
     {
-        "number": "¥0",
-        "unit": "初期費用",
-        "label": "設置費用ゼロ",
-        "detail": "太陽光パネル・PCSなど全設備の設置費用をPPA事業者が負担します。",
+        "tag": "初期費用",
+        "headline": [("初期費用 ", False), ("0円", True)],
+        "body": "太陽光パネル・PCSなど全設備の設置費用はPPA事業者が負担。"
+                "お客様の初期投資なしで太陽光発電を導入できます。",
     },
     {
-        "number": "固定",
-        "unit": "PPA単価",
-        "label": "長期安定コスト",
-        "detail": "契約期間中のPPA単価が固定。電力市場の変動に左右されません。",
+        "tag": "料金",
+        "headline": [("長期固定単価で電気代削減", False)],
+        "body": "契約期間中のPPA単価は固定。現行の電気料金より安い単価で"
+                "利用でき、電力市場の価格高騰リスクを回避できます。",
     },
     {
-        "number": "CO₂",
-        "unit": "削減",
-        "label": "脱炭素・ESG対応",
-        "detail": "再生可能エネルギーによる発電でCO₂排出量を大幅に削減できます。",
+        "tag": "保守",
+        "headline": [("維持管理の手間なし", False)],
+        "body": "設備の保守・点検・保険対応はすべてPPA事業者が実施。"
+                "24時間モニタリングで安定稼働を支えます。",
     },
     {
-        "number": "24h",
-        "unit": "モニタリング",
-        "label": "維持管理不要",
-        "detail": "設備の保守・点検・保険対応は全てPPA事業者が行います。",
-    },
-    {
-        "number": "☀",
-        "unit": "再エネ",
-        "label": "BCP対応強化",
-        "detail": "蓄電池との組み合わせで停電時の電力確保にも対応できます。",
-    },
-    {
-        "number": "↓",
-        "unit": "電気代",
-        "label": "電力コスト削減",
-        "detail": "現行電気料金よりも安い単価で電力を使用できます。",
+        "tag": "環境",
+        "headline": [("CO₂削減・脱炭素経営", False)],
+        "body": "再生可能エネルギーによる発電でCO₂排出量を大幅に削減。"
+                "蓄電池との組み合わせで停電時のBCP対応も強化できます。",
     },
 ]
 
 
+def _add_headline(slide, x, y, w, h, segments):
+    """14pt bold headline in one paragraph; number segments as orange runs."""
+    tb = slide.shapes.add_textbox(int(x), int(y), int(w), int(h))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Pt(0)
+    tf.margin_right = Pt(0)
+    tf.margin_top = Pt(0)
+    tf.margin_bottom = Pt(0)
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.LEFT
+    for text, is_number in segments:
+        run = p.add_run()
+        run.text = text
+        run.font.name = FONT_BLACK
+        run.font.size = Pt(SIZE_H2)
+        run.font.bold = True
+        run.font.color.rgb = C_ORANGE if is_number else C_DARK
+    return tb
+
+
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
-    y = CONTENT_TOP + Inches(0.08)
-
-    card_cols = 3
-    card_w = (SLIDE_W - MARGIN * 2 - Inches(0.2) * (card_cols - 1)) / card_cols
-    card_h = Inches(2.0)
+    card_h = Inches(2.45)
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM, [card_h, card_h])
 
     for i, merit in enumerate(MERITS):
-        col = i % card_cols
-        row = i // card_cols
-        cx = MARGIN + col * (card_w + Inches(0.2))
-        cy = y + row * (card_h + Inches(0.12))
+        col = i % 2
+        row = i // 2
+        x = grid_x(col * 6)
+        w = grid_w(6)
+        cx, cy, cw, ch = add_card_with_accent(slide, x, ys[row], w, card_h)
 
-        add_rounded_rect(slide, cx, cy, card_w, card_h, C_LIGHT_ORANGE)
-        add_rect(slide, cx, cy, card_w, Inches(0.07), C_ORANGE)
+        add_textbox(slide, cx, cy + Inches(0.08), cw, Inches(0.20),
+                    merit["tag"],
+                    font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                    font_color=C_ORANGE, bold=True, tracking_pt=1.2)
 
-        # Big number/symbol
-        add_textbox(slide,
-                    cx, cy + Inches(0.12),
-                    card_w, Inches(0.55),
-                    merit["number"],
-                    font_name=FONT_BLACK, font_size_pt=32,
-                    font_color=C_ORANGE, bold=True,
-                    align=PP_ALIGN.CENTER)
-        # Unit
-        add_textbox(slide,
-                    cx, cy + Inches(0.65),
-                    card_w, Inches(0.2),
-                    merit["unit"],
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_SUB,
-                    align=PP_ALIGN.CENTER)
-        # Label
-        add_textbox(slide,
-                    cx + Inches(0.08), cy + Inches(0.88),
-                    card_w - Inches(0.16), Inches(0.28),
-                    merit["label"],
-                    font_name=FONT_BODY, font_size_pt=11,
-                    font_color=C_DARK, bold=True,
-                    align=PP_ALIGN.CENTER)
-        # Detail
-        add_textbox(slide,
-                    cx + Inches(0.1), cy + Inches(1.18),
-                    card_w - Inches(0.2), Inches(0.72),
-                    merit["detail"],
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_SUB)
+        _add_headline(slide, cx, cy + Inches(0.40), cw, Inches(0.34),
+                      merit["headline"])
+
+        add_divider(slide, cx, cy + Inches(0.84), cw)
+
+        add_textbox(slide, cx, cy + Inches(0.98), cw, ch - Inches(1.04),
+                    merit["body"],
+                    font_name=FONT_BODY, font_size_pt=SIZE_BODY,
+                    font_color=C_DARK, line_spacing=LINE_SPACING_BODY)
 
     add_footer(slide)

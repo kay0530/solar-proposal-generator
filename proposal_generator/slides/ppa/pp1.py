@@ -1,93 +1,99 @@
 """
 pp1.py - なぜ今「オンサイトPPA」なのか？（static スライド）
 
-Layout (A4 landscape): 4 point cards in a single horizontal row.
-Content is fixed (no customer-specific data).
+Design v2 "Institutional Trust Grid":
+  Band 1: standfirst lead paragraph (12.5pt, line_spacing 1.4)
+  Band 2: 3 white benefit cards (grid cols 0-3 / 4-7 / 8-11)
+  Band 3: conclusion band (C_PANEL + orange left bar)
 """
 from __future__ import annotations
+
 from pathlib import Path
-from pptx.enum.text import PP_ALIGN
+
+from pptx.enum.text import MSO_ANCHOR
 from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_section_header,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_ORANGE, C_PANEL,
+    FONT_BLACK, FONT_BODY, GAP_IN_CARD, MARGIN, SLIDE_W,
+    LINE_SPACING_BODY, LINE_SPACING_LEAD, SIZE_BODY, SIZE_CAPTION, SIZE_LEAD,
+    add_card_with_accent, add_footer, add_header_bar, add_rect, add_textbox,
+    grid_x, grid_w, vstack,
 )
 
 TITLE = "なぜ今「オンサイトPPA」なのか？"
+EYEBROW = "01｜導入の背景"
 
-BODY_MAIN = (
-    "温室効果ガスとは気候変動（地球温暖化）の主要な原因となる二酸化炭素です。\n"
-    "2015年に採択されたパリ協定では、これらを出来るだけ食い止めるために、地球の気温上昇を産業革命前と比べて2℃未満に\n"
-    "抑えるという目標が設定されました。しかしながら、温室効果ガスの排出を削減する「低炭素化」だけでは目標達成が難しい\n"
-    "ことから、温室効果ガスの排出量実質ゼロを目指す「脱炭素化」の動きが世界で加速しています。"
+STANDFIRST = (
+    "2015年に採択されたパリ協定では、地球の気温上昇を産業革命前と比べて"
+    "2℃未満に抑える目標が掲げられました。温室効果ガスの排出を減らす"
+    "「低炭素化」にとどまらず、排出量実質ゼロを目指す「脱炭素化」への動きが"
+    "世界で加速するなか、「脱炭素経営」はいまや企業の責務となりつつあります。"
+    "自ら電気をつくり、賢く使う——その第一歩がオンサイトPPAです。"
 )
 
-BODY_SUB1 = "今、わたしたちにできることは何か？「脱炭素経営」が企業にも求められています。"
-BODY_SUB2 = (
-    "まずはできるところから。自分たちで電気を作り、不足したときにお互いに融通する時代へ\n"
-    "わたしたちは一歩を踏み出します。"
-)
-
-POINTS = [
-    ("電気代削減",   "再エネ電気を安定した単価で\n長期利用できます"),
-    ("CO₂削減",      "再生可能エネルギーで\nカーボンニュートラルに貢献"),
-    ("初期費用ゼロ", "設備設置・維持管理費用は\nPPA事業者が負担"),
-    ("電力安定供給", "自家消費で停電リスクを\n軽減できます"),
+CARDS = [
+    ("01", "電気代削減",
+     "再エネ電気を長期固定単価で利用でき、市場価格の変動に左右されない"
+     "安定した電力調達と停電リスクの軽減が可能になります。"),
+    ("02", "初期費用ゼロ",
+     "太陽光パネルなど全設備の設置費用・維持管理費用はPPA事業者が負担。"
+     "お客様の初期投資は不要です。"),
+    ("03", "CO₂削減・脱炭素経営",
+     "再生可能エネルギーの自家消費でCO₂排出量を削減し、"
+     "カーボンニュートラル・脱炭素経営への取り組みを前進させます。"),
 ]
+
+CONCLUSION = "いま導入する経済合理性があります"
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
-    y = CONTENT_TOP + Inches(0.05)
+    content_w = SLIDE_W - MARGIN * 2
+    band1_h = Inches(0.95)
+    band2_h = Inches(2.05)
+    band3_h = Inches(0.90)
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM, [band1_h, band2_h, band3_h])
 
-    # Main body text
-    add_textbox(slide, MARGIN, y,
-                SLIDE_W - MARGIN * 2, Inches(1.1),
-                BODY_MAIN,
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_DARK)
-    y += Inches(1.15)
+    # --- Band 1: standfirst lead paragraph ---
+    add_textbox(slide, MARGIN, ys[0], content_w, band1_h,
+                STANDFIRST,
+                font_name=FONT_BODY, font_size_pt=SIZE_LEAD,
+                font_color=C_DARK, line_spacing=LINE_SPACING_LEAD,
+                anchor=MSO_ANCHOR.TOP)
 
-    # Sub texts
-    add_textbox(slide, MARGIN, y,
-                SLIDE_W - MARGIN * 2, Inches(0.35),
-                BODY_SUB1,
-                font_name=FONT_BODY, font_size_pt=11,
-                font_color=C_ORANGE, bold=True)
-    y += Inches(0.38)
+    # --- Band 2: 3 benefit cards ---
+    for i, (num, card_title, body) in enumerate(CARDS):
+        x = grid_x(i * 4)
+        w = grid_w(4)
+        cx, cy, cw, ch = add_card_with_accent(slide, x, ys[1], w, band2_h)
 
-    add_textbox(slide, MARGIN, y,
-                SLIDE_W - MARGIN * 2, Inches(0.45),
-                BODY_SUB2,
-                font_name=FONT_BODY, font_size_pt=11,
-                font_color=C_DARK)
-    y += Inches(0.5)
+        ey_y = cy + Inches(0.06)
+        add_textbox(slide, cx, ey_y, cw, Inches(0.20),
+                    num,
+                    font_name=FONT_BLACK, font_size_pt=SIZE_CAPTION,
+                    font_color=C_ORANGE, bold=True, tracking_pt=1.2)
 
-    # Point cards (1x4 horizontal row - landscape has more width)
-    card_cols = 4
-    card_w = (SLIDE_W - MARGIN * 2 - Inches(0.15) * (card_cols - 1)) / card_cols
-    card_h = Inches(1.35)
-    for i, (point_title, point_body) in enumerate(POINTS):
-        col = i % card_cols
-        cx = MARGIN + col * (card_w + Inches(0.15))
-        cy = y
-        add_rounded_rect(slide, cx, cy, card_w, card_h, C_LIGHT_ORANGE)
-        # Orange top border accent
-        add_rect(slide, cx, cy, card_w, Inches(0.06), C_ORANGE)
-        add_textbox(slide,
-                    cx + Inches(0.12), cy + Inches(0.1),
-                    card_w - Inches(0.24), Inches(0.35),
-                    point_title,
-                    font_name=FONT_BLACK, font_size_pt=14,
-                    font_color=C_ORANGE, bold=True)
-        add_textbox(slide,
-                    cx + Inches(0.12), cy + Inches(0.48),
-                    card_w - Inches(0.24), Inches(0.75),
-                    point_body,
-                    font_name=FONT_BODY, font_size_pt=10,
-                    font_color=C_DARK)
+        title_y = ey_y + Inches(0.20) + GAP_IN_CARD
+        add_textbox(slide, cx, title_y, cw, Inches(0.28),
+                    card_title,
+                    font_name=FONT_BLACK, font_size_pt=SIZE_LEAD,
+                    font_color=C_DARK, bold=True)
+
+        body_y = title_y + Inches(0.28) + GAP_IN_CARD
+        add_textbox(slide, cx, body_y, cw, ch - Inches(0.78),
+                    body,
+                    font_name=FONT_BODY, font_size_pt=SIZE_BODY,
+                    font_color=C_DARK, line_spacing=LINE_SPACING_BODY)
+
+    # --- Band 3: conclusion band ---
+    add_rect(slide, MARGIN, ys[2], content_w, band3_h, C_PANEL)
+    add_rect(slide, MARGIN, ys[2], Inches(0.06), band3_h, C_ORANGE)
+    add_textbox(slide, MARGIN + Inches(0.30), ys[2],
+                content_w - Inches(0.60), band3_h,
+                CONCLUSION,
+                font_name=FONT_BLACK, font_size_pt=12,
+                font_color=C_NAVY, bold=True, anchor=MSO_ANCHOR.MIDDLE)
 
     add_footer(slide)

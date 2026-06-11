@@ -1,106 +1,101 @@
 """
 pp4a.py - なぜオルテナジーが選ばれるのか (Why Altenergy is chosen)
 
-PDF P5: Three strengths with explanation cards.
+Design v2 "Institutional Trust Grid":
+  Lead standfirst (12.5pt) + 3 tall strength cards
+  (grid cols 0-3 / 4-7 / 8-11): circle number marker top-left
+  + 14pt navy title + 10.5pt body paragraphs.
 - 競争力のある単価
 - ワンストップサービス
 - 豊富な実績
 """
 from __future__ import annotations
+
 from pathlib import Path
-from pptx.enum.text import PP_ALIGN
+
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    C_LIGHT_GRAY, FONT_BLACK, FONT_BODY, HEADER_H, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY,
+    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_W,
+    LINE_SPACING_BODY, LINE_SPACING_LEAD,
+    SIZE_BODY, SIZE_H2, SIZE_LEAD, SIZE_SMALL,
+    add_card_with_accent, add_divider, add_footer, add_header_bar,
+    add_multiline_textbox, add_number_marker, add_textbox,
+    grid_x, grid_w, vstack,
 )
 
 TITLE = "なぜオルテナジーが選ばれるのか"
+EYEBROW = "02｜オルテナジーの強み"
+
+LEAD = (
+    "PPAにおいて実績を伸ばしている企業は多くありません。"
+    "オルテナジーが選ばれ続けるのは、3つの強みがあるからです。"
+)
+
+STRENGTHS = [
+    ("1", "競争力のある単価", [
+        "単価はリース金利・パネル原価などの外的要因と、"
+        "施工・管理コストなどの内的要因で決まります。",
+        "オルテナジーは自社施工体制と効率的なオペレーションで"
+        "両方のコストを最適化し、競争力のある単価を実現しています。",
+    ]),
+    ("2", "ワンストップサービス", [
+        "設計・施工・メンテナンス・発電事業運営までを自社グループで"
+        "一貫対応。お客様の窓口は一つです。",
+        "EPC事業者としての実績と発電事業者としてのノウハウを併せ持ち、"
+        "設計変更や障害対応も迅速に行えます。",
+    ]),
+    ("3", "豊富な実績", [
+        "累計設置容量100MW以上・導入企業数200社以上。"
+        "工場・倉庫・商業施設など多様な建物への導入実績があります。",
+        "全国対応のネットワークで、北海道から沖縄まで"
+        "日本全国のお客様にサービスを提供しています。",
+    ]),
+]
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
-    y = CONTENT_TOP + Inches(0.05)
+    lead_h = Inches(0.55)
+    card_h = Inches(4.30)
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM, [lead_h, card_h])
 
-    # Intro text
-    add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.50),
-                "PPAにおいて実績を伸ばしている企業は実はそれほど多くはありません。\n"
-                "オルテナジーが実績を伸ばすことが出来ている理由は３つの強みがあるからです。",
-                font_name=FONT_BODY, font_size_pt=11, font_color=C_DARK)
-    y += Inches(0.60)
+    # --- Lead standfirst ---
+    add_textbox(slide, MARGIN, ys[0], SLIDE_W - MARGIN * 2, lead_h,
+                LEAD,
+                font_name=FONT_BODY, font_size_pt=SIZE_LEAD,
+                font_color=C_DARK, line_spacing=LINE_SPACING_LEAD)
 
-    # Three strength cards
-    strengths = [
-        {
-            "num": "1",
-            "title": "競争力のある単価",
-            "body": (
-                "単価を決める要素は大きく外的要因と内的要因の２つがあります。\n\n"
-                "外的要因：リース金利・パネル原価等の仕入れコスト\n"
-                "内的要因：施工コスト・管理コスト等の社内コスト\n\n"
-                "オルテナジーは自社施工体制と効率的なオペレーションにより、"
-                "両方のコストを最適化し、競争力のある単価を実現しています。"
-            ),
-        },
-        {
-            "num": "2",
-            "title": "ワンストップサービス",
-            "body": (
-                "設計・施工・メンテナンス・発電事業運営までを一貫して自社グループで実施。\n\n"
-                "お客様の窓口は一つ。設計変更や障害対応も迅速に行えます。\n\n"
-                "EPC（設計・調達・建設）事業者としての実績と、"
-                "発電事業者としてのノウハウの両方を持つ強みがあります。"
-            ),
-        },
-        {
-            "num": "3",
-            "title": "豊富な実績",
-            "body": (
-                "累計設置容量100MW以上、導入企業数200社以上の実績。\n\n"
-                "工場・倉庫・商業施設・オフィスビルなど、"
-                "多様な建物への導入実績があります。\n\n"
-                "全国対応可能なネットワークで、"
-                "北海道から沖縄まで日本全国のお客様にサービスを提供しています。"
-            ),
-        },
-    ]
+    # --- 3 strength cards ---
+    marker_d = Inches(0.34)
+    for i, (num, card_title, paras) in enumerate(STRENGTHS):
+        x = grid_x(i * 4)
+        w = grid_w(4)
+        cx, cy, cw, ch = add_card_with_accent(slide, x, ys[1], w, card_h)
 
-    card_gap = Inches(0.15)
-    card_w = (SLIDE_W - MARGIN * 2 - card_gap * 2) / 3
-    card_h = Inches(4.8)
+        add_number_marker(slide, cx + marker_d // 2,
+                          cy + Inches(0.10) + marker_d // 2, num)
+        add_textbox(slide, cx + marker_d + Inches(0.12), cy + Inches(0.10),
+                    cw - marker_d - Inches(0.12), Inches(0.34),
+                    card_title,
+                    font_name=FONT_BLACK, font_size_pt=SIZE_H2,
+                    font_color=C_NAVY, bold=True, anchor=MSO_ANCHOR.MIDDLE)
 
-    for i, s in enumerate(strengths):
-        cx = MARGIN + i * (card_w + card_gap)
+        add_divider(slide, cx, cy + Inches(0.56), cw)
 
-        # Card background
-        add_rounded_rect(slide, cx, y, card_w, card_h, C_LIGHT_GRAY)
-        # Orange top bar
-        add_rect(slide, cx, y, card_w, Inches(0.06), C_ORANGE)
-
-        # Number circle
-        num_size = Inches(0.55)
-        add_rounded_rect(slide, cx + (card_w - num_size) / 2, y + Inches(0.20),
-                         num_size, num_size, C_ORANGE)
-        add_textbox(slide, cx + (card_w - num_size) / 2, y + Inches(0.22),
-                    num_size, num_size,
-                    s["num"],
-                    font_name=FONT_BLACK, font_size_pt=24,
-                    font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-
-        # Title
-        add_textbox(slide, cx + Inches(0.1), y + Inches(0.85),
-                    card_w - Inches(0.2), Inches(0.35),
-                    s["title"],
-                    font_name=FONT_BLACK, font_size_pt=13,
-                    font_color=C_ORANGE, bold=True, align=PP_ALIGN.CENTER)
-
-        # Body
-        add_textbox(slide, cx + Inches(0.15), y + Inches(1.25),
-                    card_w - Inches(0.3), card_h - Inches(1.45),
-                    s["body"],
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_DARK)
+        lines = []
+        for j, para in enumerate(paras):
+            if j > 0:
+                # blank spacer paragraph between body paragraphs
+                lines.append(("", FONT_BODY, SIZE_SMALL, C_DARK, False,
+                              PP_ALIGN.LEFT))
+            lines.append((para, FONT_BODY, SIZE_BODY, C_DARK, False,
+                          PP_ALIGN.LEFT))
+        add_multiline_textbox(slide, cx, cy + Inches(0.72), cw,
+                              ch - Inches(0.78),
+                              lines, line_spacing=LINE_SPACING_BODY)
 
     add_footer(slide)

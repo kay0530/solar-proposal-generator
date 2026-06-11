@@ -353,6 +353,7 @@ def _apply_quote_to_session(q: dict) -> None:
     st.session_state["_quote_raw_cost"] = int(q.get("raw_cost", 0))
 
 
+@st.cache_data(ttl=3600)
 def load_electricity_master() -> list[dict]:
     """Load contract electricity rates from Excel 契約電力マスタ sheet.
 
@@ -985,7 +986,7 @@ with tab1:
                     st.session_state["sf_office"] = _loaded.get("office_name", "")
                     st.session_state["sf_address"] = _loaded.get("address", "")
                     _restore_widget_keys(_loaded)
-                    st.success(f"読み込みました: {_sel}")
+                    st.toast(f"読み込みました: {_sel}", icon="✅")
                     st.rerun()
             else:
                 st.info("保存済みの案件はありません")
@@ -1026,63 +1027,66 @@ with tab1:
                     options=range(len(opp_records)),
                     format_func=lambda i: opp_options[i],
                     key="sf_selected_idx",
+                    index=None,
+                    placeholder="商談を選択してください",
                 )
-                sel = opp_records[selected_idx]
-                acct = sel.get("Account") or {}
-                parts = [
-                    acct.get("BillingState", ""),
-                    acct.get("BillingCity", ""),
-                    acct.get("BillingStreet", ""),
-                ]
-                st.session_state["sf_company"] = acct.get("Name", "")
-                st.session_state["sf_office"] = sel.get("Name", "")
-                st.session_state["sf_address"] = "".join(p for p in parts if p)
-                st.session_state["sf_opp_id"] = sel.get("Id", "")
+                if selected_idx is not None:
+                    sel = opp_records[selected_idx]
+                    acct = sel.get("Account") or {}
+                    parts = [
+                        acct.get("BillingState", ""),
+                        acct.get("BillingCity", ""),
+                        acct.get("BillingStreet", ""),
+                    ]
+                    st.session_state["sf_company"] = acct.get("Name", "")
+                    st.session_state["sf_office"] = sel.get("Name", "")
+                    st.session_state["sf_address"] = "".join(p for p in parts if p)
+                    st.session_state["sf_opp_id"] = sel.get("Id", "")
 
-                # Auto-connect Box folder for selected deal
-                from proposal_generator.box_client import is_available as _box_ok
-                _deal_name = sel.get("Name", "")
-                if _box_ok() and _deal_name:
-                    _prev_box_deal = st.session_state.get("_box_auto_deal", "")
-                    if _deal_name != _prev_box_deal:
-                        try:
-                            from proposal_generator.box_client import search_deal_folders, find_proposal_folder, list_files
-                            # Strip SF prefixes (㊛㊚★●◆ etc.) and search with clean name
-                            _clean_name = _re.sub(r'^[㊛㊚★●◆◇■□▲△▼▽○◎☆※♦♢\s]+', '', _deal_name).strip()
-                            _candidates = search_deal_folders(_clean_name)
-                            st.session_state["_box_auto_deal"] = _deal_name
-                            st.session_state["box_candidates"] = _candidates
-                            # Exact match on clean name preferred
-                            _exact = next((c for c in _candidates if c["name"] == _clean_name), None)
-                            _match = _exact or (_candidates[0] if len(_candidates) == 1 else None)
-                            if _match:
-                                _pid = find_proposal_folder(_match["id"])
-                                _fid = _pid or _match["id"]
-                                st.session_state["box_proposal_folder_id"] = _fid
-                                _files = list_files(_fid) if _pid else []
-                                st.session_state["box_file_list"] = _files
-                                st.success(f"📦 Box連携: {_match['name']} → 03_提案資料 ({len(_files)} ファイル)")
-                            elif len(_candidates) > 1:
-                                st.info(f"📦 Box: {len(_candidates)}件の候補あり — 下から選択してください")
-                            else:
-                                st.caption(f"📦 Box: 「{_clean_name}」のフォルダが見つかりません")
-                        except Exception:
-                            pass
+                    # Auto-connect Box folder for selected deal
+                    from proposal_generator.box_client import is_available as _box_ok
+                    _deal_name = sel.get("Name", "")
+                    if _box_ok() and _deal_name:
+                        _prev_box_deal = st.session_state.get("_box_auto_deal", "")
+                        if _deal_name != _prev_box_deal:
+                            try:
+                                from proposal_generator.box_client import search_deal_folders, find_proposal_folder, list_files
+                                # Strip SF prefixes (㊛㊚★●◆ etc.) and search with clean name
+                                _clean_name = _re.sub(r'^[㊛㊚★●◆◇■□▲△▼▽○◎☆※♦♢\s]+', '', _deal_name).strip()
+                                _candidates = search_deal_folders(_clean_name)
+                                st.session_state["_box_auto_deal"] = _deal_name
+                                st.session_state["box_candidates"] = _candidates
+                                # Exact match on clean name preferred
+                                _exact = next((c for c in _candidates if c["name"] == _clean_name), None)
+                                _match = _exact or (_candidates[0] if len(_candidates) == 1 else None)
+                                if _match:
+                                    _pid = find_proposal_folder(_match["id"])
+                                    _fid = _pid or _match["id"]
+                                    st.session_state["box_proposal_folder_id"] = _fid
+                                    _files = list_files(_fid) if _pid else []
+                                    st.session_state["box_file_list"] = _files
+                                    st.success(f"📦 Box連携: {_match['name']} → 03_提案資料 ({len(_files)} ファイル)")
+                                elif len(_candidates) > 1:
+                                    st.info(f"📦 Box: {len(_candidates)}件の候補あり — 下から選択してください")
+                                else:
+                                    st.caption(f"📦 Box: 「{_clean_name}」のフォルダが見つかりません")
+                            except Exception as e:
+                                st.caption(f"Box自動接続スキップ: {e}")
 
-                # Show Box candidate selector if multiple matches
-                _box_cands = st.session_state.get("box_candidates", [])
-                if len(_box_cands) > 1 and not st.session_state.get("box_proposal_folder_id"):
-                    from proposal_generator.box_client import find_proposal_folder, list_files
-                    _opts = ["選択してください"] + [c["name"] for c in _box_cands]
-                    _chosen = st.selectbox("📦 Box商談フォルダを選択", _opts, key="box_auto_select")
-                    if _chosen != "選択してください":
-                        _match = next(c for c in _box_cands if c["name"] == _chosen)
-                        _pid = find_proposal_folder(_match["id"])
-                        _fid = _pid or _match["id"]
-                        st.session_state["box_proposal_folder_id"] = _fid
-                        _files = list_files(_fid) if _pid else []
-                        st.session_state["box_file_list"] = _files
-                        st.success(f"📦 {_chosen} → 03_提案資料 ({len(_files)} ファイル)")
+                    # Show Box candidate selector if multiple matches
+                    _box_cands = st.session_state.get("box_candidates", [])
+                    if len(_box_cands) > 1 and not st.session_state.get("box_proposal_folder_id"):
+                        from proposal_generator.box_client import find_proposal_folder, list_files
+                        _opts = ["選択してください"] + [c["name"] for c in _box_cands]
+                        _chosen = st.selectbox("📦 Box商談フォルダを選択", _opts, key="box_auto_select")
+                        if _chosen != "選択してください":
+                            _match = next(c for c in _box_cands if c["name"] == _chosen)
+                            _pid = find_proposal_folder(_match["id"])
+                            _fid = _pid or _match["id"]
+                            st.session_state["box_proposal_folder_id"] = _fid
+                            _files = list_files(_fid) if _pid else []
+                            st.session_state["box_file_list"] = _files
+                            st.success(f"📦 {_chosen} → 03_提案資料 ({len(_files)} ファイル)")
             else:
                 st.info("該当する商談が見つかりませんでした")
 
@@ -1166,7 +1170,7 @@ with tab1:
                             st.session_state["sf_company"] = _loaded.get("company_name", "")
                             st.session_state["sf_office"] = _loaded.get("office_name", "")
                             st.session_state["sf_address"] = _loaded.get("address", "")
-                            st.success(f"Boxから読み込みました: {_box_sel}")
+                            st.toast(f"Boxから読み込みました: {_box_sel}", icon="📦")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Box読込エラー: {e}")
@@ -1201,7 +1205,16 @@ with tab1:
             st.markdown("*未選択*")
 
     if not company_name:
-        st.caption("⬆ 上の検索から取引先・商談を選択してください")
+        st.caption("⬆ 上の検索から取引先・商談を選択してください（または下の手動入力をご利用ください）")
+
+    # Manual fallback: works even when Salesforce is unavailable.
+    # Bound to the SAME session keys the SF search writes (sf_company etc.),
+    # so downstream code (customer_data build, Tab4) needs no changes.
+    with st.expander("✏️ 手動で入力・修正", expanded=False):
+        st.caption("Salesforceが利用できない場合や、取得内容を修正したい場合はこちらに直接入力してください")
+        st.text_input("取引先名", key="sf_company")
+        st.text_input("商談名", key="sf_office")
+        st.text_input("所在地", key="sf_address")
 
     st.divider()
 
@@ -1269,7 +1282,7 @@ with tab2:
                         st.json(_q)
                     if st.button("📥 この内容をフォームに反映する", key="apply_quote", type="primary"):
                         _apply_quote_to_session(_q)
-                        st.success("反映しました。各項目を確認してください。")
+                        st.toast("反映しました。各項目を確認してください。", icon="✅")
                         st.rerun()
             except Exception as e:
                 st.error(f"読み込みエラー: {e}")
@@ -1593,6 +1606,7 @@ with tab2:
         ipals_file = st.file_uploader(
             "iPals出力CSVをアップロード（任意）",
             type=["csv"],
+            key="ipals_file",
             help="iPals自家消費発電量CSVをアップロード → 年間発電量等を自動計算",
         )
         if ipals_file is not None:
@@ -1834,10 +1848,15 @@ with tab2:
             with ct_col1:
                 contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
             with ct_col2:
+                def _mark_ppa_price_manual():
+                    """User edited PPA price directly — stop auto-calc from overwriting it."""
+                    st.session_state["_ppa_price_manually_set"] = True
+
                 ppa_unit_price = st.number_input(
                     "PPA単価 (円/kWh)",
                     min_value=0.0, step=0.01, format="%.2f",
                     key="ppa_price_input",
+                    on_change=_mark_ppa_price_manual,
                     help="下の「PPA単価自動試算」ボタンで自動入力できます",
                 )
             with ct_col3:
@@ -2116,6 +2135,7 @@ with tab2:
                 # Auto-apply calculated price if not manually set
                 if _result.get("min_ppa_price") and not st.session_state.get("_ppa_price_manually_set"):
                     st.session_state["_pending_ppa_price"] = float(_result["min_ppa_price"])
+                    st.toast(f"PPA単価を自動入力しました: {float(_result['min_ppa_price']):.2f} 円/kWh", icon="💹")
                     st.rerun()
 
             _calc_res = st.session_state.get("ppa_calc_result")
@@ -2152,6 +2172,7 @@ with tab2:
                         type="secondary",
                     ):
                         st.session_state["_pending_ppa_price"] = _auto_price
+                        st.toast(f"PPA単価を適用しました: {_auto_price:.2f} 円/kWh", icon="✅")
                         st.rerun()
                 with _adj_col2:
                     _manual_ppa = st.number_input(
@@ -2163,6 +2184,7 @@ with tab2:
                     if st.button("この値を適用", key="apply_manual_ppa"):
                         st.session_state["_pending_ppa_price"] = _manual_ppa
                         st.session_state["_ppa_price_manually_set"] = True
+                        st.toast(f"PPA単価を適用しました: {_manual_ppa:.2f} 円/kWh", icon="✅")
                         st.rerun()
 
                 # Cashflow table
@@ -2595,10 +2617,16 @@ with tab3:
                 key=_sort_key,
             )
             final_slides = [item.split("  ─  ")[0].strip() for item in sorted_slides]
+            # Merge custom-added slides so they survive reruns (checkbox/sort
+            # changes would otherwise wipe them from selected_slides)
+            _custom_added = st.session_state.get("custom_added_slides", [])
+            final_slides = final_slides + [s for s in _custom_added if s not in final_slides]
             st.session_state["selected_slides"] = final_slides
         else:
-            st.warning("スライドが選択されていません")
-            st.session_state["selected_slides"] = []
+            _custom_added = st.session_state.get("custom_added_slides", [])
+            if not _custom_added:
+                st.warning("スライドが選択されていません")
+            st.session_state["selected_slides"] = list(_custom_added)
 
     # ------------------------------------------------------------------
     # Advanced: Custom slide composition (for irregular cases like FIP)
@@ -2645,12 +2673,30 @@ with tab3:
 
             if _selected_add and st.button("選択したスライドを追加", key="apply_custom_add"):
                 _new_ids = [item.split("  ─  ")[0].strip() for item in _selected_add]
+                # Persist additions separately — the sort/checkbox block above
+                # rebuilds selected_slides every rerun and merges this list in.
+                _custom = list(st.session_state.get("custom_added_slides", []))
+                for _nid in _new_ids:
+                    if _nid not in _custom:
+                        _custom.append(_nid)
+                st.session_state["custom_added_slides"] = _custom
                 _existing = st.session_state.get("selected_slides", [])
-                st.session_state["selected_slides"] = _existing + _new_ids
+                st.session_state["selected_slides"] = _existing + [
+                    n for n in _new_ids if n not in _existing
+                ]
+                st.toast(f"{len(_new_ids)} 件のスライドを追加しました", icon="➕")
                 st.rerun()
 
         else:
             st.info("全スライドが既に選択されています")
+
+        # Show currently persisted custom additions with a reset option
+        _custom_now = st.session_state.get("custom_added_slides", [])
+        if _custom_now:
+            st.caption("追加済みカスタムスライド: " + ", ".join(_custom_now))
+            if st.button("カスタム追加をすべて解除", key="clear_custom_add"):
+                st.session_state["custom_added_slides"] = []
+                st.rerun()
 
         st.divider()
         st.caption(
@@ -2753,15 +2799,27 @@ with tab4:
         help="チェックを外すと、フォーム入力値のみでPPTXを生成します",
     )
 
+    # Pre-flight warnings (shown before generation)
+    _company_ok = bool(customer_data.get("company_name"))
+    if _company_ok:
+        _panel_kw_t4 = customer_data.get("panel_total_kw", 0) or 0
+        if _panel_kw_t4 <= 0:
+            st.warning("⚠️ パネル容量が 0 kW です。Tab② でパネル情報を入力してください。")
+        if not _is_epc_tab4 and (customer_data.get("ppa_unit_price", 0) or 0) <= 0:
+            st.warning("⚠️ PPA単価が 0 円/kWh です。Tab② で入力するか自動試算を実行してください。")
+
     generate_btn = st.button(
         "🚀  PPTX を生成",
         type="primary",
-        disabled=not customer_data.get("company_name"),
+        disabled=not _company_ok,
     )
+    if not _company_ok:
+        st.caption("⚠️ 取引先名が未入力のため生成できません。Tab① でSalesforce検索または手動入力してください。")
 
     if generate_btn:
         with st.spinner("生成中..."):
             data = dict(customer_data)
+            _gen_results: list[str] = []
 
             if use_excel and EXCEL_PATH.exists():
                 try:
@@ -2779,15 +2837,15 @@ with tab4:
                     )
                     ipals_csv = None
                     if ipals_file_val:
-                        ipals_csv = ipals_file_val.read().decode(
+                        ipals_csv = ipals_file_val.getvalue().decode(
                             "utf-8-sig", errors="replace"
                         )
 
                     excel_out = run_excel_calculation(EXCEL_PATH, ci, ipals_csv=ipals_csv)
                     data.update({k: v for k, v in excel_out.items() if v is not None})
-                    st.success("✅ Excel計算完了")
+                    _gen_results.append("✅ Excel計算完了")
                 except Exception as e:
-                    st.warning(f"Excel計算をスキップしました: {e}")
+                    _gen_results.append(f"⚠️ Excel計算をスキップしました: {e}")
 
             from proposal_generator.generator import generate_proposal
 
@@ -2809,36 +2867,53 @@ with tab4:
                     f"{_type_label}提案_{company}_{customer_data.get('proposal_date', '')}.pptx"
                 )
 
-                st.success("✅ 生成完了！")
+                _gen_results.append(f"✅ 生成完了！（{len(selected_slides)} スライド / {filename}）")
+                # Persist into session state so the download / Box upload
+                # buttons below survive reruns (a button click reruns the
+                # script with generate_btn=False)
                 st.session_state["last_pptx_bytes"] = pptx_bytes
                 st.session_state["last_pptx_filename"] = filename
-                st.download_button(
-                    label="📥  PPTXをダウンロード",
-                    data=pptx_bytes,
-                    file_name=filename,
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                )
-
-                # Box upload
-                from proposal_generator.box_client import is_available as _box_ok_t4
-                _box_fid = st.session_state.get("box_proposal_folder_id")
-                if _box_ok_t4() and _box_fid:
-                    if st.button("📦 Boxにアップロード", key="box_upload_pptx"):
-                        try:
-                            from proposal_generator.box_client import upload_file as _box_up
-                            _tmp_box = Path(tempfile.mktemp(suffix=".pptx"))
-                            with open(_tmp_box, "wb") as _bf:
-                                _bf.write(pptx_bytes)
-                            _res = _box_up(_box_fid, _tmp_box, filename)
-                            _tmp_box.unlink(missing_ok=True)
-                            st.success(f"📦 Boxにアップロード完了: {_res['name']}")
-                        except Exception as e:
-                            st.error(f"Boxアップロードエラー: {e}")
-                elif _box_ok_t4():
-                    st.caption("📦 Tab 1でBoxフォルダを検索すると、ここからアップロードできます")
-
+                st.session_state["last_pptx_results"] = _gen_results
             except Exception as e:
                 st.error(f"生成エラー: {e}")
                 raise
             finally:
                 output_path.unlink(missing_ok=True)
+
+    # ----- Persistent output block (survives reruns; renders right after
+    #       generation too, since it sits below the if-block) -----
+    if st.session_state.get("last_pptx_bytes"):
+        st.divider()
+        for _msg in st.session_state.get("last_pptx_results", []):
+            if _msg.startswith("⚠"):
+                st.warning(_msg)
+            else:
+                st.success(_msg)
+
+        _last_bytes = st.session_state["last_pptx_bytes"]
+        _last_filename = st.session_state.get("last_pptx_filename", "proposal.pptx")
+        st.download_button(
+            label="📥  PPTXをダウンロード",
+            data=_last_bytes,
+            file_name=_last_filename,
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            key="dl_last_pptx",
+        )
+
+        # Box upload (now functional: state persists across the button rerun)
+        from proposal_generator.box_client import is_available as _box_ok_t4
+        _box_fid = st.session_state.get("box_proposal_folder_id")
+        if _box_ok_t4() and _box_fid:
+            if st.button("📦 Boxにアップロード", key="box_upload_pptx"):
+                try:
+                    from proposal_generator.box_client import upload_file as _box_up
+                    _tmp_box = Path(tempfile.mktemp(suffix=".pptx"))
+                    with open(_tmp_box, "wb") as _bf:
+                        _bf.write(_last_bytes)
+                    _res = _box_up(_box_fid, _tmp_box, _last_filename)
+                    _tmp_box.unlink(missing_ok=True)
+                    st.success(f"📦 Boxにアップロード完了: {_res['name']}")
+                except Exception as e:
+                    st.error(f"Boxアップロードエラー: {e}")
+        elif _box_ok_t4():
+            st.caption("📦 Tab 1でBoxフォルダを検索すると、ここからアップロードできます")

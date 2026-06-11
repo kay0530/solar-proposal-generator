@@ -1,28 +1,29 @@
 """
-pp0.py - PPA表紙スライド (Refined cover design)
+pp0.py - PPA表紙スライド (Design v2: Institutional Trust Grid)
 
-Layout: Asymmetric split with stronger typographic hierarchy
-- Left 38%: Orange panel with logo, eyebrow tag, hero copy, service badge
-- Right 62%: Customer name as hero, refined spec cards with accent stripes
-- Subtle geometric accents (corner triangle, vertical hairline)
+Full-custom cover on white canvas (no header bar / no orange panel):
+- 0.18in full-bleed orange band at the very top (the only full-width
+  brand element in the deck) + color logo top-left under the band
+- Left block (cols 0-6): eyebrow -> customer name (+ 御中 inline run)
+  -> office -> theme title -> hairline -> date + company
+- Right block (cols 8-11): quiet spec list (label + number/unit pairs
+  separated by hairlines) — no cards, no fills
+- Bottom: hairline + centered copyright
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
-from pptx.dml.color import RGBColor
-
 from proposal_generator.utils import (
-    C_BORDER, C_DARK, C_LIGHT_GRAY, C_NAVY, C_ORANGE, C_ORANGE_DARK, C_SUB,
-    C_WHITE,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    SIZE_HERO, SIZE_H1, SIZE_H2, SIZE_H3, SIZE_BODY, SIZE_CAPTION, SIZE_SMALL,
-    add_image_contain, add_rect, add_rounded_rect, add_textbox, add_divider,
+    C_DARK, C_FAINT, C_NAVY, C_ORANGE, C_SUB,
+    CONTENT_TOP, FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
+    SIZE_CAPTION, SIZE_SMALL, GAP_BLOCK,
+    add_divider, add_image_contain, add_number_unit, add_rect, add_textbox,
+    fmt_num, grid_x, grid_w, vstack,
 )
 
 
@@ -34,6 +35,35 @@ def _fmt_date(val) -> str:
     return s
 
 
+def _add_company_line(slide, x, y, w, h, company: str, name_size_pt: float):
+    """Company name + 御中 as two runs in ONE paragraph so long
+    (2-line) company names reflow without colliding with 御中."""
+    tb = slide.shapes.add_textbox(int(x), int(y), int(w), int(h))
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.auto_size = None
+    tf.margin_left = Pt(0)
+    tf.margin_right = Pt(0)
+    tf.margin_top = Pt(0)
+    tf.margin_bottom = Pt(0)
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.LEFT
+    p.line_spacing = 1.2
+    r1 = p.add_run()
+    r1.text = company
+    r1.font.name = FONT_BLACK
+    r1.font.size = Pt(name_size_pt)
+    r1.font.color.rgb = C_DARK
+    r1.font.bold = True
+    r2 = p.add_run()
+    r2.text = "　御中"
+    r2.font.name = FONT_BODY
+    r2.font.size = Pt(16)
+    r2.font.color.rgb = C_DARK
+    r2.font.bold = False
+    return tb
+
+
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     company = data.get("company_name", "") or ""
     office = data.get("office_name", "") or ""
@@ -41,182 +71,140 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     capacity = data.get("system_capacity_kw")
     years = int(data.get("contract_years", 20) or 20)
     unit_price = data.get("ppa_unit_price")
+    annual_gen = data.get("annual_gen_kwh")
     address = data.get("address", "") or ""
 
-    split_x = SLIDE_W * 0.38
+    # ------------------------------------------------------------------
+    # Top brand band + color logo
+    # ------------------------------------------------------------------
+    add_rect(slide, 0, 0, SLIDE_W, Inches(0.18), C_ORANGE)
 
-    # ============================================================
-    # LEFT PANEL (orange, full bleed)
-    # ============================================================
-    add_rect(slide, 0, 0, split_x, SLIDE_H, C_ORANGE)
-    # Darker left accent strip (slightly wider for visual weight)
-    add_rect(slide, 0, 0, Inches(0.08), SLIDE_H, C_ORANGE_DARK)
+    if logo_path and Path(logo_path).exists():
+        try:
+            add_image_contain(slide, MARGIN, Inches(0.36),
+                              Inches(1.60), Inches(0.45), Path(logo_path))
+        except Exception:
+            pass
 
-    # Logo (white version)
-    _white_logo = data.get("_logo_white_path")
-    _use_logo = _white_logo if _white_logo and Path(_white_logo).exists() else logo_path
-    if _use_logo and Path(_use_logo).exists():
-        add_image_contain(slide,
-                          Inches(0.55), Inches(0.55),
-                          Inches(2.3), Inches(0.55), _use_logo)
+    # ------------------------------------------------------------------
+    # Left block (cols 0-6) — vertically justified
+    # ------------------------------------------------------------------
+    lx = grid_x(0)
+    lw = grid_w(7)
 
-    # Eyebrow tag (small caps style)
-    add_textbox(slide, Inches(0.55), Inches(2.0),
-                split_x - Inches(0.9), Inches(0.22),
-                "PROPOSAL  |  ONSITE PPA",
-                font_name=FONT_BODY, font_size_pt=SIZE_SMALL,
-                font_color=C_WHITE, bold=True)
+    # Company name size steps down for long names
+    clen = len(company)
+    if clen > 25:
+        name_size = 22
+    elif clen > 18:
+        name_size = 26
+    else:
+        name_size = 30
 
-    # Thin separator line under eyebrow
-    add_rect(slide, Inches(0.55), Inches(2.30), Inches(0.5), Inches(0.02), C_WHITE)
+    blocks: list[tuple] = []
 
-    # Hero category text
-    add_textbox(slide, Inches(0.55), Inches(2.55),
-                split_x - Inches(0.9), Inches(0.36),
-                "自家消費型",
-                font_name=FONT_BODY, font_size_pt=14,
-                font_color=C_WHITE, bold=False)
+    def draw_eyebrow(y):
+        add_textbox(slide, lx, y, lw, Inches(0.22),
+                    "御提案書｜オンサイト太陽光PPAサービス",
+                    font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                    font_color=C_SUB, bold=True, tracking_pt=1.2)
 
-    # Main hero (3 lines, large)
-    add_textbox(slide, Inches(0.55), Inches(2.95),
-                split_x - Inches(0.9), Inches(2.0),
-                "太陽光発電\nシステム",
-                font_name=FONT_BLACK, font_size_pt=34,
-                font_color=C_WHITE, bold=True)
+    blocks.append((Inches(0.24), draw_eyebrow))
 
-    # Sub-tagline
-    add_textbox(slide, Inches(0.55), Inches(4.95),
-                split_x - Inches(0.9), Inches(0.85),
-                "導入費用ゼロで\n電気代とCO₂を削減する\n次世代エネルギープラン。",
-                font_name=FONT_BODY, font_size_pt=11,
-                font_color=C_WHITE, bold=False)
+    def draw_company(y):
+        _add_company_line(slide, lx, y, lw, Inches(1.00), company, name_size)
 
-    # Service badge (outlined style instead of solid for elegance)
-    _badge_y = Inches(6.4)
-    _badge_h = Inches(0.42)
-    _badge_w = Inches(3.4)
-    badge = slide.shapes.add_shape(
-        MSO_SHAPE.ROUNDED_RECTANGLE,
-        int(Inches(0.55)), int(_badge_y),
-        int(_badge_w), int(_badge_h),
-    )
-    badge.fill.background()  # transparent
-    badge.line.color.rgb = C_WHITE
-    badge.line.width = Pt(1.2)
-    add_textbox(slide, Inches(0.55), _badge_y + Inches(0.08),
-                _badge_w, Inches(0.30),
-                "オンサイトPPAサービスのご提案",
-                font_name=FONT_BLACK, font_size_pt=11,
-                font_color=C_WHITE, bold=True,
-                align=PP_ALIGN.CENTER)
+    blocks.append((Inches(1.00), draw_company))
 
-    # Bottom: company name + date (compact, two-line)
-    add_textbox(slide, Inches(0.55), SLIDE_H - Inches(0.95),
-                split_x - Inches(0.9), Inches(0.22),
-                "株式会社オルテナジー",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_WHITE, bold=True)
-    add_textbox(slide, Inches(0.55), SLIDE_H - Inches(0.70),
-                split_x - Inches(0.9), Inches(0.20),
-                prop_date,
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_WHITE)
+    if office or address:
+        office_h = Inches(0.30) + (Inches(0.22) if address else Inches(0))
 
-    # ============================================================
-    # RIGHT PANEL (white)
-    # ============================================================
+        def draw_office(y):
+            yy = y
+            if office:
+                add_textbox(slide, lx, yy, lw, Inches(0.28),
+                            office,
+                            font_name=FONT_BODY, font_size_pt=14,
+                            font_color=C_DARK, bold=True)
+                yy += Inches(0.32)
+            if address:
+                add_textbox(slide, lx, yy, lw, Inches(0.20),
+                            f"設置先住所：{address}",
+                            font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                            font_color=C_SUB)
 
-    info_x = split_x + Inches(0.7)
-    info_w = SLIDE_W - split_x - Inches(1.1)
+        blocks.append((office_h, draw_office))
 
-    # Top eyebrow on right side
-    add_textbox(slide, info_x, Inches(0.9),
-                info_w, Inches(0.22),
-                "FOR",
-                font_name=FONT_BODY, font_size_pt=SIZE_SMALL,
-                font_color=C_ORANGE, bold=True)
+    def draw_theme(y):
+        add_textbox(slide, lx, y, lw, Inches(0.45),
+                    "自家消費型太陽光発電のご提案",
+                    font_name=FONT_BLACK, font_size_pt=24,
+                    font_color=C_NAVY, bold=True)
 
-    # Customer name (hero)
-    add_textbox(slide, info_x, Inches(1.20),
-                info_w, Inches(1.30),
-                f"{company}",
-                font_name=FONT_BLACK, font_size_pt=32,
-                font_color=C_DARK, bold=True)
+    blocks.append((Inches(0.45), draw_theme))
 
-    # 御中
-    add_textbox(slide, info_x, Inches(2.55),
-                info_w, Inches(0.32),
-                "御中",
-                font_name=FONT_BODY, font_size_pt=16,
-                font_color=C_SUB)
-
-    # Decorative thin orange accent line
-    add_rect(slide, info_x, Inches(3.05),
-             Inches(2.4), Inches(0.04), C_ORANGE)
-
-    # Office name + address
-    if office:
-        add_textbox(slide, info_x, Inches(3.25),
-                    info_w, Inches(0.32),
-                    office,
-                    font_name=FONT_BODY, font_size_pt=14,
-                    font_color=C_DARK, bold=True)
-    if address:
-        add_textbox(slide, info_x, Inches(3.65),
-                    info_w, Inches(0.24),
-                    f"設置先住所：{address}",
-                    font_name=FONT_BODY, font_size_pt=9,
+    def draw_dateline(y):
+        add_divider(slide, lx, y, Inches(3.2))
+        yy = y + Inches(0.10)
+        if prop_date:
+            add_textbox(slide, lx, yy, lw, Inches(0.18),
+                        prop_date,
+                        font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                        font_color=C_SUB)
+            yy += Inches(0.20)
+        add_textbox(slide, lx, yy, lw, Inches(0.18),
+                    "株式会社オルテナジー",
+                    font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
                     font_color=C_SUB)
 
-    # ---- System spec cards (refined with accent bar via add_card_with_accent style) ----
-    y_spec = Inches(4.45)
-    specs = []
+    blocks.append((Inches(0.52) if prop_date else Inches(0.32), draw_dateline))
+
+    left_bottom = Inches(7.30)
+    ys = vstack(CONTENT_TOP, left_bottom,
+                [h for h, _ in blocks], min_gap=GAP_BLOCK)
+    for (h, fn), y in zip(blocks, ys):
+        fn(y)
+
+    # ------------------------------------------------------------------
+    # Right block (cols 8-11) — quiet spec list, no cards, no fills
+    # ------------------------------------------------------------------
+    sx = grid_x(8)
+    sw = grid_w(4)
+
+    specs: list[tuple] = []
     if capacity:
-        specs.append(("設備容量", f"{capacity:.1f}", "kW"))
+        specs.append(("設備容量", fmt_num(capacity, 2), "kW"))
     if unit_price:
-        specs.append(("PPA単価", f"¥{unit_price:.2f}", "/kWh"))
-    specs.append(("契約期間", f"{years}", "年"))
+        specs.append(("PPA単価", fmt_num(unit_price, 2), "円/kWh"))
+    if years:
+        specs.append(("契約期間", str(years), "年"))
+    if annual_gen:
+        specs.append(("年間想定発電量", fmt_num(annual_gen, 0), "kWh"))
 
-    card_gap = Inches(0.18)
-    card_w = (info_w - card_gap * (len(specs) - 1)) / len(specs) if specs else Inches(2.0)
-    card_h = Inches(1.55)
+    if specs:
+        row_h = Inches(0.92)
+        total_h = row_h * len(specs)
+        sy = CONTENT_TOP + (left_bottom - CONTENT_TOP - total_h) // 2
+        for i, (label, num, unit) in enumerate(specs):
+            ry = sy + row_h * i
+            add_textbox(slide, sx, ry + Inches(0.06), sw, Inches(0.18),
+                        label,
+                        font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                        font_color=C_SUB, bold=True)
+            add_number_unit(slide, sx, ry + Inches(0.26), sw, Inches(0.42),
+                            num, unit,
+                            number_size_pt=20, unit_size_pt=10,
+                            number_color=C_DARK, unit_color=C_SUB,
+                            align=PP_ALIGN.LEFT)
+            if i < len(specs) - 1:
+                add_divider(slide, sx, ry + row_h - Inches(0.08), sw)
 
-    for i, (label, value, unit) in enumerate(specs):
-        cx = info_x + i * (card_w + card_gap)
-        # Card background
-        add_rounded_rect(slide, cx, y_spec, card_w, card_h, C_WHITE,
-                         radius_pt=8.0,
-                         border_color=C_BORDER, border_pt=0.5)
-        # Top accent bar
-        add_rect(slide, cx + Inches(0.15), y_spec,
-                 card_w - Inches(0.30), Inches(0.05), C_ORANGE)
-        # Label (top)
-        add_textbox(slide, cx, y_spec + Inches(0.20),
-                    card_w, Inches(0.25),
-                    label,
-                    font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
-                    font_color=C_SUB, bold=True, align=PP_ALIGN.CENTER)
-        # Value (large)
-        add_textbox(slide, cx, y_spec + Inches(0.55),
-                    card_w, Inches(0.55),
-                    value,
-                    font_name=FONT_BLACK, font_size_pt=24,
-                    font_color=C_ORANGE, bold=True, align=PP_ALIGN.CENTER)
-        # Unit (small, below value)
-        add_textbox(slide, cx, y_spec + Inches(1.10),
-                    card_w, Inches(0.25),
-                    unit,
-                    font_name=FONT_BODY, font_size_pt=SIZE_BODY,
-                    font_color=C_SUB, align=PP_ALIGN.CENTER)
-
-    # ---- Bottom band with copyright ----
-    bottom_band_y = SLIDE_H - Inches(0.45)
-    add_rect(slide, split_x, bottom_band_y, SLIDE_W - split_x, Inches(0.02), C_BORDER)
-    add_textbox(slide, split_x, SLIDE_H - Inches(0.30),
-                SLIDE_W - split_x, Inches(0.20),
-                "Copyright 2026 altenergy, Inc.   |   https://altenergy.co.jp/",
+    # ------------------------------------------------------------------
+    # Bottom: hairline + copyright
+    # ------------------------------------------------------------------
+    add_divider(slide, MARGIN, Inches(7.70), SLIDE_W - MARGIN * 2)
+    add_textbox(slide, MARGIN, Inches(7.80),
+                SLIDE_W - MARGIN * 2, Inches(0.20),
+                "Copyright 2026 altenergy, Inc.  |  https://altenergy.co.jp/",
                 font_name=FONT_BODY, font_size_pt=SIZE_SMALL,
-                font_color=C_SUB, align=PP_ALIGN.CENTER)
-
-    # Bottom accent bar (extends across slide)
-    add_rect(slide, 0, SLIDE_H - Inches(0.08), SLIDE_W, Inches(0.08), C_ORANGE)
+                font_color=C_FAINT, align=PP_ALIGN.CENTER)

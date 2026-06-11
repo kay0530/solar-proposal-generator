@@ -1,141 +1,152 @@
 """
-pp7.py - ご利用料金に関して (PPA pricing)
+pp7.py - ご利用料金 (PPA pricing) — design system v2 "one-number slide"
 
-Faithfully reproduces the Excel ご利用料金 slide:
-- Title: ご利用料金に関して
-- PPA explanation text
-- Two large KPI: 初期ご負担金額 ¥0.- / 20年目までの一律単価 ¥XX.XX/kWh
-- Four merit boxes: 再エネ賦課金, 燃料費等調整, 環境価値, 炭素税
-- Footnotes
+Left (cols 0-6): 48pt metric hero (PPA単価, 20-year fixed) + 2 lines of
+supporting copy + 初期ご負担金額 0円 sub-metric (28pt number/unit pair).
+Right (cols 7-11): mini comparison table (現行単価 / PPA単価 / 削減率,
+PPA row highlighted) + 4 merit lines with small orange square markers.
+Bottom: 8pt assumptions note.
 """
 from __future__ import annotations
+
 from pathlib import Path
+
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    C_LIGHT_GRAY, C_NAVY, C_LIGHT_TEAL,
-    FONT_BLACK, FONT_BODY, HEADER_H, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_section_header, fmt_yen, fmt_num,
+    CONTENT_BOTTOM, CONTENT_TOP, MARGIN, SLIDE_W,
+    C_DARK, C_ORANGE, C_SUB,
+    FONT_BODY,
+    SIZE_BODY, SIZE_CAPTION, SIZE_SMALL,
+    GAP_BLOCK, TABLE_ROW_H,
+    add_footer, add_header_bar, add_metric_hero, add_multiline_textbox,
+    add_number_unit, add_rect, add_section_header, add_table, add_textbox,
+    grid_w, grid_x, vstack,
 )
 
-TITLE = "ご利用料金に関して"
+TITLE = "ご利用料金"
+EYEBROW = "04｜ご契約条件"
+
+MERITS = [
+    ("再エネ賦課金の上昇対策",
+     "基本的には上昇傾向の再エネ賦課金。"
+     "上がれば上がるほど自家消費によるメリットは大きくなります。"),
+    ("燃料費等調整単価の上昇対策",
+     "燃料費が高騰すればプラスに振れる調整額。"
+     "再エネ賦課金同様、支払う必要がなくなります。"),
+    ("環境価値（CO2排出量抑制）",
+     "RE100達成には環境クレジットの購入が必須である企業も。"
+     "市場調達する量を削減可能。"),
+    ("炭素税対策",
+     "2050年までの脱炭素化に向けて段階的に炭素税率を"
+     "引き上げていくという計画があります。"),
+]
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     """Render PP7 (PPA pricing) onto a blank slide."""
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
-    y = CONTENT_TOP + Inches(0.05)
-    tax_display = data.get("tax_display", "税抜")
-    ppa_price = data.get("ppa_unit_price", 0)
+    tax_display = data.get("tax_display", "税抜") or "税抜"
+    ppa_price = float(data.get("ppa_unit_price", 0) or 0)
     years = int(data.get("contract_years", 20) or 20)
 
-    # ---- PPA explanation ----
-    add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.22),
-                "PPA（Power Purchase Agreement）",
-                font_name=FONT_BLACK, font_size_pt=13,
-                font_color=C_ORANGE, bold=True)
-    y += Inches(0.28)
+    # Current average unit price (for the comparison table)
+    cur_price = None
+    try:
+        annual_cost = data.get("annual_cost")
+        annual_kwh = float(data.get("annual_kwh", 0) or 0)
+        if annual_cost and annual_kwh > 0:
+            cur_price = float(annual_cost) / annual_kwh
+    except (TypeError, ValueError):
+        cur_price = None
 
-    add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.40),
-                "太陽光発電システムによる電力供給契約を言います。"
-                "使用した電力量のみお支払いいただく契約です。",
-                font_name=FONT_BODY, font_size_pt=10, font_color=C_DARK)
-    y += Inches(0.40)
+    price_str = f"{ppa_price:.2f}" if ppa_price else "—"
 
-    # Tax note (right-aligned)
-    add_textbox(slide, SLIDE_W - MARGIN - Inches(2.5), y - Inches(0.05),
-                Inches(2.5), Inches(0.20),
-                f"金額は全て{tax_display}",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_SUB, align=PP_ALIGN.RIGHT)
-
-    # ---- Two large KPI boxes ----
-    kpi_gap = Inches(0.3)
-    kpi_w = (SLIDE_W - MARGIN * 2 - kpi_gap) / 2
-    kpi_h = Inches(1.8)
-
-    # Left: 初期ご負担金額 (navy background, white text)
-    add_rounded_rect(slide, MARGIN, y, kpi_w, kpi_h, C_NAVY)
-    add_textbox(slide, MARGIN, y + Inches(0.20), kpi_w, Inches(0.28),
-                "初期ご負担金額",
-                font_name=FONT_BODY, font_size_pt=14,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    add_textbox(slide, MARGIN, y + Inches(0.60), kpi_w, Inches(0.80),
-                "¥0.-",
-                font_name=FONT_BLACK, font_size_pt=36,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-
-    # Right: 一律単価 (teal background, white text - wider)
-    rx = MARGIN + kpi_w + kpi_gap
-    add_rounded_rect(slide, rx, y, kpi_w, kpi_h, C_LIGHT_TEAL)
-    add_textbox(slide, rx, y + Inches(0.20), kpi_w, Inches(0.28),
-                f"{years}年目までの一律単価",
-                font_name=FONT_BODY, font_size_pt=16,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    price_str = f"¥{ppa_price:.2f}" if ppa_price else "—"
-    add_textbox(slide, rx, y + Inches(0.55), kpi_w, Inches(0.80),
-                price_str,
-                font_name=FONT_BLACK, font_size_pt=36,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    add_textbox(slide, rx, y + Inches(1.30), kpi_w, Inches(0.28),
-                "/kWh",
-                font_name=FONT_BODY, font_size_pt=26,
-                font_color=C_WHITE, align=PP_ALIGN.CENTER)
-
-    y += kpi_h + Inches(0.25)
-
-    # ---- Four merit boxes ----
-    merits = [
-        ("再エネ賦課金の上昇対策",
-         "基本的には上昇傾向の再エネ賦課金。"
-         "上がれば上がるほど自家消費によるメリットは大きくなります。"),
-        ("燃料費等調整単価の上昇対策",
-         "燃料費が高騰すればプラスに振れる調整額。"
-         "再エネ賦課金同様、支払う必要がなくなります。"),
-        ("環境価値（CO2排出量抑制）",
-         "RE100達成には環境クレジットの購入が必須である企業も。"
-         "市場調達する量を削減可能。"),
-        ("炭素税対策",
-         "2050年までの脱炭素化に向けて段階的に炭素税率を"
-         "引き上げていくという計画があります。"),
-    ]
-
-    merit_gap = Inches(0.12)
-    merit_w = (SLIDE_W - MARGIN * 2 - merit_gap * 3) / 4
-    merit_h = Inches(1.8)
-
-    for i, (title, desc) in enumerate(merits):
-        mx = MARGIN + i * (merit_w + merit_gap)
-        add_rounded_rect(slide, mx, y, merit_w, merit_h, C_LIGHT_GRAY)
-        add_rect(slide, mx, y, merit_w, Inches(0.04), C_ORANGE)
-
-        add_textbox(slide, mx + Inches(0.08), y + Inches(0.12),
-                    merit_w - Inches(0.16), Inches(0.40),
-                    title,
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_ORANGE, bold=True)
-        add_textbox(slide, mx + Inches(0.08), y + Inches(0.55),
-                    merit_w - Inches(0.16), merit_h - Inches(0.65),
-                    desc,
-                    font_name=FONT_BODY, font_size_pt=8,
-                    font_color=C_DARK)
-
-    y += merit_h + Inches(0.15)
-
-    # ---- Footnotes ----
+    # ---- Bottom assumptions note (anchored, 8pt) ----
     notes = [
-        "※ 通常の電力供給契約で発生するような、基本料金はかかりません。"
-        "再生可能エネルギー促進賦課金および燃料費調整額のお支払いが不要となります。",
-        "環境価値については貴社に帰属するものとし、上記ご提案単価は環境価値を含めた金額となっています。",
-        "ご提案単価の有効期限はご提案日より1ヶ月間となります。",
+        f"※ 金額は全て{tax_display}表記です。通常の電力供給契約で発生する基本料金はかかりません。",
+        "※ 再生可能エネルギー促進賦課金および燃料費調整額のお支払いが不要となります。",
+        "※ 環境価値は貴社に帰属するものとし、上記ご提案単価は環境価値を含めた金額です。",
+        "※ ご提案単価の有効期限はご提案日より1ヶ月間となります。",
     ]
-    for note in notes:
-        add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.18),
-                    note,
-                    font_name=FONT_BODY, font_size_pt=7, font_color=C_SUB)
-        y += Inches(0.16)
+    if cur_price is not None:
+        notes.append("※ 現行平均単価はご提供いただいた電気料金実績より算出した参考値です。")
+    note_h = Inches(0.16) * len(notes) + Inches(0.06)
+    note_y = CONTENT_BOTTOM - note_h
+    add_multiline_textbox(
+        slide, MARGIN, note_y, SLIDE_W - MARGIN * 2, note_h,
+        [(t, FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT) for t in notes],
+        line_spacing=1.3)
+
+    area_top = CONTENT_TOP + Inches(0.05)
+    area_bottom = note_y - GAP_BLOCK
+
+    # ---- Left cols 0-6: price hero + copy + zero-upfront sub-metric ----
+    lx = grid_x(0)
+    lw = grid_w(7)
+    hero_h = Inches(1.60)
+    copy_h = Inches(0.65)
+    sub_h = Inches(0.85)
+    ys = vstack(area_top, area_bottom, [hero_h, copy_h, sub_h])
+
+    add_metric_hero(slide, lx, ys[0], lw, hero_h,
+                    price_str, "円/kWh", f"PPA単価（{years}年固定）")
+
+    add_multiline_textbox(
+        slide, lx, ys[1], lw, copy_h,
+        [("PPA（Power Purchase Agreement）は、太陽光発電システムによる電力供給契約です。",
+          FONT_BODY, SIZE_BODY, C_DARK, False, PP_ALIGN.LEFT),
+         ("ご使用いただいた電力量のみをお支払いいただくため、設備投資のご負担はありません。",
+          FONT_BODY, SIZE_BODY, C_DARK, False, PP_ALIGN.LEFT)],
+        line_spacing=1.35)
+
+    add_textbox(slide, lx, ys[2], lw, Inches(0.20),
+                "初期ご負担金額",
+                font_size_pt=SIZE_CAPTION, font_color=C_SUB, bold=True)
+    add_number_unit(slide, lx, ys[2] + Inches(0.22), lw, Inches(0.50),
+                    "0", "円")
+
+    # ---- Right cols 7-11: comparison table + merit lines ----
+    rx = grid_x(7)
+    rw = grid_w(5)
+
+    reduction_str = "—"
+    if cur_price and ppa_price and cur_price > 0:
+        reduction_str = f"{(cur_price - ppa_price) / cur_price * 100:.1f}%"
+    cmp_rows = [
+        ["区分", "単価（円/kWh）"],
+        ["現行平均単価", f"{cur_price:.2f}" if cur_price is not None else "—"],
+        ["PPA単価", price_str],
+        ["削減率", reduction_str],
+    ]
+    cmp_h = Inches(0.34) + TABLE_ROW_H * len(cmp_rows)
+
+    merit_item_h = Inches(0.68)
+    merit_h = Inches(0.34) + merit_item_h * len(MERITS)
+
+    rys = vstack(area_top, area_bottom, [cmp_h, merit_h])
+
+    add_section_header(slide, rx, rys[0], rw, "現行単価との比較")
+    add_table(slide, rx, rys[0] + Inches(0.34), rw, cmp_rows,
+              [rw - Inches(1.9), Inches(1.9)],
+              total_row=2)  # highlight the PPA row
+
+    add_section_header(slide, rx, rys[1], rw, "PPAのメリット")
+    my = rys[1] + Inches(0.34)
+    sq = Inches(0.07)
+    indent = Inches(0.16)
+    for title, desc in MERITS:
+        add_rect(slide, rx, my + Inches(0.06), sq, sq, C_ORANGE)
+        add_textbox(slide, rx + indent, my, rw - indent, Inches(0.20),
+                    title,
+                    font_size_pt=SIZE_BODY, font_color=C_DARK, bold=True)
+        add_textbox(slide, rx + indent, my + Inches(0.21),
+                    rw - indent, Inches(0.40),
+                    desc,
+                    font_size_pt=SIZE_CAPTION, font_color=C_SUB,
+                    line_spacing=1.3)
+        my += merit_item_h
 
     add_footer(slide)
