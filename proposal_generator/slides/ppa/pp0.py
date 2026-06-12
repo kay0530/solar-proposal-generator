@@ -23,7 +23,7 @@ from proposal_generator.utils import (
     CONTENT_TOP, FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
     SIZE_CAPTION, SIZE_SMALL, GAP_BLOCK,
     add_divider, add_image_contain, add_number_unit, add_rect, add_textbox,
-    fmt_num, grid_x, grid_w, vstack,
+    asset_path, fmt_num, grid_x, grid_w, vstack,
 )
 
 
@@ -181,10 +181,15 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     if annual_gen:
         specs.append(("年間想定発電量", fmt_num(annual_gen, 0), "kWh"))
 
+    cover_illust = asset_path("illust_cover.png")
     if specs:
-        row_h = Inches(0.92)
+        row_h = Inches(0.80) if cover_illust else Inches(0.92)
         total_h = row_h * len(specs)
-        sy = CONTENT_TOP + (left_bottom - CONTENT_TOP - total_h) // 2
+        if cover_illust:
+            # Specs anchored to the top; illustration fills the lower right
+            sy = CONTENT_TOP + Inches(0.10)
+        else:
+            sy = CONTENT_TOP + (left_bottom - CONTENT_TOP - total_h) // 2
         for i, (label, num, unit) in enumerate(specs):
             ry = sy + row_h * i
             add_textbox(slide, sx, ry + Inches(0.06), sw, Inches(0.18),
@@ -198,6 +203,19 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                             align=PP_ALIGN.LEFT)
             if i < len(specs) - 1:
                 add_divider(slide, sx, ry + row_h - Inches(0.08), sw)
+
+    # ------------------------------------------------------------------
+    # Cover illustration (lower-right, under the spec list)
+    # ------------------------------------------------------------------
+    if cover_illust:
+        try:
+            il_y = CONTENT_TOP + Inches(0.10) + Inches(0.80) * max(len(specs), 1) + Inches(0.25)
+            il_h = Inches(7.45) - il_y
+            if int(il_h) > int(Inches(1.2)):
+                add_image_contain(slide, sx - Inches(0.3), il_y,
+                                  sw + Inches(0.3), il_h, cover_illust)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Bottom: hairline + copyright

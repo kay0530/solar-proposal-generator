@@ -146,6 +146,19 @@ ACCENT_BAR_H = Inches(0.045)  # card top accent thickness
 ACCENT_BAR_INSET = Inches(0.12)
 
 # ---------------------------------------------------------------------------
+# Brand illustration assets (optional — slides degrade gracefully if absent)
+# ---------------------------------------------------------------------------
+
+ASSETS_DIR = Path(__file__).parent / "assets"
+
+
+def asset_path(name: str) -> Optional[Path]:
+    """Return the path of a bundled illustration, or None if missing."""
+    p = ASSETS_DIR / name
+    return p if p.exists() else None
+
+
+# ---------------------------------------------------------------------------
 # Template helpers
 # ---------------------------------------------------------------------------
 

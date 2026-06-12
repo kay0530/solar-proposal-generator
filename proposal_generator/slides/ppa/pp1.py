@@ -17,8 +17,8 @@ from proposal_generator.utils import (
     CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_ORANGE, C_PANEL,
     FONT_BLACK, FONT_BODY, GAP_IN_CARD, MARGIN, SLIDE_W,
     LINE_SPACING_BODY, LINE_SPACING_LEAD, SIZE_BODY, SIZE_CAPTION, SIZE_LEAD,
-    add_card_with_accent, add_footer, add_header_bar, add_icon, add_rect,
-    add_textbox,
+    add_card_with_accent, add_footer, add_header_bar, add_icon,
+    add_image_contain, add_rect, add_textbox, asset_path,
     grid_x, grid_w, vstack,
 )
 
@@ -53,17 +53,26 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
     content_w = SLIDE_W - MARGIN * 2
-    band1_h = Inches(0.95)
+    illust = asset_path("illust_decarb.png")
+    band1_h = Inches(1.45) if illust else Inches(0.95)
     band2_h = Inches(2.05)
     band3_h = Inches(0.90)
     ys = vstack(CONTENT_TOP, CONTENT_BOTTOM, [band1_h, band2_h, band3_h])
 
-    # --- Band 1: standfirst lead paragraph ---
-    add_textbox(slide, MARGIN, ys[0], content_w, band1_h,
+    # --- Band 1: standfirst lead paragraph (+ optional illustration) ---
+    sf_w = grid_w(9) if illust else content_w
+    add_textbox(slide, MARGIN, ys[0], sf_w, band1_h,
                 STANDFIRST,
                 font_name=FONT_BODY, font_size_pt=SIZE_LEAD,
                 font_color=C_DARK, line_spacing=LINE_SPACING_LEAD,
                 anchor=MSO_ANCHOR.TOP)
+    if illust:
+        try:
+            add_image_contain(slide, grid_x(9) + Inches(0.2), ys[0] - Inches(0.05),
+                              grid_w(3) - Inches(0.2), band1_h + Inches(0.10),
+                              illust)
+        except Exception:
+            pass
 
     # --- Band 2: 3 benefit cards ---
     for i, (num, icon_name, card_title, body) in enumerate(CARDS):

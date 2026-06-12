@@ -17,7 +17,7 @@ from proposal_generator.utils import (
     C_NAVY, C_ORANGE, C_WHITE,
     FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
     SIZE_CAPTION,
-    add_line, add_rect, add_textbox, grid_x, grid_w,
+    add_line, add_rect, add_textbox, asset_path, grid_x, grid_w,
 )
 
 TITLE = "効果シミュレーション"
@@ -26,6 +26,22 @@ TITLE = "効果シミュレーション"
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     # Full-bleed navy canvas
     add_rect(slide, 0, 0, SLIDE_W, SLIDE_H, C_NAVY)
+
+    # Full-bleed line-art illustration (navy background, art lower-right).
+    # Height-fit and center: overflow is cropped by the slide bounds.
+    illust = asset_path("illust_divider.png")
+    if illust:
+        try:
+            from PIL import Image as _PILImage
+            img = _PILImage.open(str(illust))
+            aspect = img.size[0] / img.size[1]
+            render_h = int(SLIDE_H)
+            render_w = int(int(SLIDE_H) * aspect)
+            render_x = (int(SLIDE_W) - render_w) // 2
+            slide.shapes.add_picture(str(illust), render_x, 0,
+                                     render_w, render_h)
+        except Exception:
+            pass
 
     x = grid_x(1)
     w = grid_w(9)
