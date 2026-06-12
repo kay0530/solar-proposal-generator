@@ -4,8 +4,8 @@ new_summary.py - まとめ・サマリースライド (design v2: Institutional 
 Three-tier closing, eyebrow '06｜まとめ':
   1. Three KPI cards (annual saving / CO2 / zero-upfront or payback) at 28pt
   2. 48pt metric hero: cumulative saving over the contract period (cols 3-8)
-  3. Next steps with circle number markers, quiet spec strip,
-     and the deck's only dark band: navy CTA with white outline pill
+  3. Next steps with circle number markers + quiet spec strip
+     (CTA band removed per user: proposal may follow the site survey)
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from proposal_generator.utils import (
     CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_SUB, C_WHITE,
     FONT_BLACK, GAP_CARD, MARGIN, SIZE_BODY, SIZE_CAPTION, SLIDE_W,
     add_footer, add_header_bar, add_kpi_card, add_metric_hero,
-    add_number_marker, add_pill_label, add_rect, add_section_header,
+    add_number_marker, add_rect, add_section_header,
     add_textbox, fmt_yen, grid_w, grid_x, vstack,
 )
 
@@ -60,10 +60,9 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     step_row_h = Inches(0.40)
     steps_h = int(Inches(0.34)) + int(step_row_h) * 2
     spec_h = Inches(0.24)
-    cta_h = Inches(0.70)
 
     ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
-                [lead_h, kpi_h, hero_h, steps_h, spec_h, cta_h],
+                [lead_h, kpi_h, hero_h, steps_h, spec_h],
                 min_gap=GAP_CARD)
 
     # ---- Lead: company intro ----
@@ -131,22 +130,5 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     add_textbox(slide, MARGIN, ys[4], content_w, spec_h, spec,
                 font_size_pt=SIZE_CAPTION, font_color=C_SUB,
                 align=PP_ALIGN.CENTER)
-
-    # ---- CTA band (the deck's only dark band) ----
-    cta_y = ys[5]
-    add_rect(slide, MARGIN, cta_y, content_w, cta_h, C_NAVY)
-    add_textbox(slide, int(MARGIN) + int(Inches(0.35)), cta_y,
-                int(content_w) - int(Inches(2.50)), cta_h,
-                "まずは現地調査から——日程のご相談を承ります",
-                font_name=FONT_BLACK, font_size_pt=13, font_color=C_WHITE,
-                bold=True, anchor=MSO_ANCHOR.MIDDLE)
-    pill_w = Inches(1.45)
-    pill_h = Inches(0.34)
-    add_pill_label(slide,
-                   int(MARGIN) + int(content_w) - int(pill_w)
-                   - int(Inches(0.35)),
-                   int(cta_y) + (int(cta_h) - int(pill_h)) // 2,
-                   pill_w, pill_h, "現地調査無料",
-                   font_color=C_WHITE)
 
     add_footer(slide)
