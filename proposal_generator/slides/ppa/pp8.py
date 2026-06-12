@@ -104,13 +104,22 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         cum_num, cum_unit = "—", ""
     band = [(f"累計削減額（{sim_years}年間）", cum_num, cum_unit)]
 
-    recovery = data.get("investment_recovery_yr")
-    try:
-        rec_f = float(recovery) if recovery is not None else None
-    except (TypeError, ValueError):
-        rec_f = None
-    band.append(("投資回収年", f"{rec_f:.1f}" if rec_f else "—",
-                 "年" if rec_f else ""))
+    # 投資回収年 is an EPC concept — PPA customers make no upfront
+    # investment, so showing a payback period is misleading. Show the
+    # annual average saving instead on PPA decks.
+    is_ppa = str(data.get("proposal_type", "ppa")).lower() != "epc"
+    if is_ppa:
+        if cumulative and sim_years:
+            avg_num, avg_unit = _yen_parts(cumulative / sim_years)
+            band.append(("年間平均削減額", avg_num, avg_unit))
+    else:
+        recovery = data.get("investment_recovery_yr")
+        try:
+            rec_f = float(recovery) if recovery is not None else None
+        except (TypeError, ValueError):
+            rec_f = None
+        band.append(("投資回収年", f"{rec_f:.1f}" if rec_f else "—",
+                     "年" if rec_f else ""))
 
     irr_v = data.get("irr")
     if isinstance(irr_v, (int, float)) and irr_v:
