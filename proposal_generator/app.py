@@ -114,6 +114,17 @@ def _check_auth() -> bool:
 if not _check_auth():
     st.stop()
 
+# ---------------------------------------------------------------------------
+# Sidebar: login info / logout
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.caption(f"ログイン中: {st.session_state.get('_auth_email', '')}")
+    if st.button("ログアウト", key="logout_btn"):
+        st.session_state.clear()
+        st.query_params.clear()
+        st.rerun()
+
 _SORTABLE_STYLE = (
     ".sortable-item { text-align: left !important; "
     "max-width: 55% !important; padding: 5px 12px !important; "
@@ -132,6 +143,7 @@ h1 a, h2 a, h3 a, .stMarkdown a[href^="#"] {
 EXCEL_PATH = BASE_DIR.parent / "ＰＬ_補ありなしPPAEPC_260317_XXXX様_v3.3.1.xlsm"
 SAVE_DIR = BASE_DIR / "saved_cases"
 SAVE_DIR.mkdir(exist_ok=True)
+AUTOSAVE_PATH = SAVE_DIR / "_autosave.json"
 
 # ---------------------------------------------------------------------------
 # Load profiles
@@ -395,6 +407,242 @@ def load_electricity_master() -> list[dict]:
             return json.load(f)
     except Exception:
         return []
+
+
+@st.cache_data(show_spinner=False)
+def _parse_ipals_csv(raw_bytes: bytes) -> dict:
+    """Parse iPals CSV bytes and aggregate generation/demand metrics.
+
+    Cached so the heavy decode+parse+aggregate runs only when the uploaded
+    file content changes, not on every rerun. Self-contained: returns
+    row_count, display totals, and the dict stored in
+    st.session_state["ipals_data"].
+    """
+    import csv
+    import io
+
+    # Try cp932 (Shift_JIS) first, then utf-8
+    for _enc in ("cp932", "utf-8-sig", "utf-8"):
+        try:
+            _text = raw_bytes.decode(_enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    else:
+        _text = raw_bytes.decode("utf-8", errors="replace")
+
+    _reader = csv.reader(io.StringIO(_text))
+    next(_reader, [])  # skip header row
+    # Cols: 月,日,時,発電量(kWh),需要量(kWh),不足電力量(kWh),余剰電力量(kWh),自家消費電力量(kWh),自家消費率(%),消費率(%),モジュール出力(kWh)
+    _total_gen = 0.0
+    _total_demand = 0.0
+    _total_surplus = 0.0
+    _total_self_consume = 0.0
+    _monthly_gen = [0.0] * 12
+    _hourly_demand = []
+    _hourly_generation = []
+    _hourly_self_consumption = []
+    _hourly_timestamps = []
+    _row_count = 0
+    for _row in _reader:
+        if len(_row) < 8:
+            continue
+        try:
+            _month = int(_row[0])
+            _day = int(_row[1])
+            _hour = int(_row[2])
+            _gen = float(_row[3]) if _row[3] and _row[3] != "-" else 0.0
+            _demand = float(_row[4]) if _row[4] and _row[4] != "-" else 0.0
+            _surplus = float(_row[6]) if _row[6] and _row[6] != "-" else 0.0
+            _self_c = float(_row[7]) if _row[7] and _row[7] != "-" else 0.0
+        except (ValueError, IndexError):
+            continue
+        _total_gen += _gen
+        _total_demand += _demand
+        _total_surplus += _surplus
+        _total_self_consume += _self_c
+        if 1 <= _month <= 12:
+            _monthly_gen[_month - 1] += _gen
+        _hourly_demand.append(_demand)
+        _hourly_generation.append(_gen)
+        _hourly_self_consumption.append(_self_c)
+        _hourly_timestamps.append((_month, _day, _hour))
+        _row_count += 1
+
+    if _row_count == 0:
+        return {"row_count": 0, "ipals_data": {}}
+
+    _self_rate = (_total_self_consume / _total_gen * 100) if _total_gen > 0 else 0.0
+    _co2_t = _total_gen * 0.000453  # t-CO2/kWh (2023 grid emission factor)
+
+    return {
+        "row_count": _row_count,
+        "total_gen": _total_gen,
+        "total_self_consume": _total_self_consume,
+        "self_rate": _self_rate,
+        "total_surplus": _total_surplus,
+        "ipals_data": {
+            "annual_gen_kwh": round(_total_gen),
+            "annual_demand_kwh": round(_total_demand),
+            "self_consumption_kwh": round(_total_self_consume),
+            "self_consumption_pct": round(_self_rate, 1) / 100,
+            "surplus_kwh": round(_total_surplus),
+            "co2_annual_t": round(_co2_t, 1),
+            "monthly_gen_kwh": [round(m) for m in _monthly_gen],
+            "hourly_demand": _hourly_demand,
+            "hourly_generation": _hourly_generation,
+            "hourly_self_consumption": _hourly_self_consumption,
+            "hourly_timestamps": _hourly_timestamps,
+        },
+    }
+
+
+@st.fragment
+def _render_demand_cut_analysis() -> None:
+    """Demand-cut analysis KPIs + plotly charts (PP9/EP5 preview).
+
+    Runs as a fragment so chart interactions rerun only this block instead
+    of the whole app. Reads st.session_state["ipals_data"] only.
+    """
+    import plotly.graph_objects as go
+
+    _ipals_hourly = st.session_state.get("ipals_data", {})
+    if not _ipals_hourly.get("hourly_demand"):
+        return
+
+    _h_demand = _ipals_hourly["hourly_demand"]
+    _h_self_c = _ipals_hourly["hourly_self_consumption"]
+    _h_ts = _ipals_hourly["hourly_timestamps"]
+
+    # Post-solar demand = max(0, demand - self_consumption)
+    _h_post_demand = [max(0.0, d - sc) for d, sc in zip(_h_demand, _h_self_c)]
+
+    # Find pre-solar peak
+    _pre_peak_val = max(_h_demand)
+    _pre_peak_idx = _h_demand.index(_pre_peak_val)
+    _pre_peak_ts = _h_ts[_pre_peak_idx]
+
+    # Find post-solar peak
+    _post_peak_val = max(_h_post_demand)
+    _post_peak_idx = _h_post_demand.index(_post_peak_val)
+    _post_peak_ts = _h_ts[_post_peak_idx]
+
+    # KPIs
+    _dc_k1, _dc_k2, _dc_k3 = st.columns(3)
+    with _dc_k1:
+        st.metric(
+            "導入前ピークデマンド",
+            f"{_pre_peak_val:,.1f} kW",
+            help=f"{_pre_peak_ts[0]}月{_pre_peak_ts[1]}日 {_pre_peak_ts[2]}時",
+        )
+    with _dc_k2:
+        st.metric(
+            "導入後ピークデマンド",
+            f"{_post_peak_val:,.1f} kW",
+            help=f"{_post_peak_ts[0]}月{_post_peak_ts[1]}日 {_post_peak_ts[2]}時",
+        )
+    with _dc_k3:
+        _demand_cut = _pre_peak_val - _post_peak_val
+        st.metric("デマンド削減量", f"{_demand_cut:,.1f} kW")
+
+    def _extract_window(peak_idx, total_len):
+        """Extract ~12-day (288h) window around peak, aligned to midnight."""
+        # Find midnight of peak day (hour 0)
+        _peak_day_start = peak_idx - _h_ts[peak_idx][2]  # subtract hour
+        # Start 3 days before
+        _win_start = max(0, _peak_day_start - 3 * 24)
+        # End 9 days after start (total 12 days = 288 hours)
+        _win_end = min(total_len, _win_start + 12 * 24)
+        return _win_start, _win_end
+
+    _n_hours = len(_h_demand)
+
+    # --- Chart 1: Pre-solar peak period ---
+    _w1_start, _w1_end = _extract_window(_pre_peak_idx, _n_hours)
+    _w1_ts = _h_ts[_w1_start:_w1_end]
+    _w1_demand = _h_demand[_w1_start:_w1_end]
+    _w1_self_c = _h_self_c[_w1_start:_w1_end]
+    # X-axis labels
+    _w1_labels = [f"{t[0]}/{t[1]} {t[2]:02d}:00" for t in _w1_ts]
+    # Tick positions: show date at hour 0
+    _w1_tickvals = [i for i, t in enumerate(_w1_ts) if t[2] == 0]
+    _w1_ticktext = [f"{_w1_ts[i][0]}/{_w1_ts[i][1]}" for i in _w1_tickvals]
+
+    fig1 = go.Figure()
+    fig1.add_trace(go.Scatter(
+        x=list(range(len(_w1_demand))), y=_w1_demand,
+        mode="lines", name="使用電力量",
+        line=dict(color="royalblue", width=1.5),
+        hovertext=_w1_labels,
+    ))
+    fig1.add_trace(go.Scatter(
+        x=list(range(len(_w1_self_c))), y=_w1_self_c,
+        mode="lines", name="自家消費量", fill="tozeroy",
+        line=dict(color="orange", width=0.5),
+        fillcolor="rgba(255,165,0,0.3)",
+        hovertext=_w1_labels,
+    ))
+    fig1.add_hline(
+        y=_pre_peak_val, line_dash="dash", line_color="red", line_width=1.5,
+        annotation_text=f"ピーク {_pre_peak_val:,.0f} kW",
+        annotation_position="top left",
+    )
+    fig1.update_layout(
+        title="① PV導入前 ピーク期間",
+        xaxis=dict(
+            tickvals=_w1_tickvals, ticktext=_w1_ticktext,
+            title="日付",
+        ),
+        yaxis=dict(title="電力量 (kW)"),
+        height=350, margin=dict(t=40, b=40, l=50, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # --- Chart 2: Post-solar peak period ---
+    _w2_start, _w2_end = _extract_window(_post_peak_idx, _n_hours)
+    _w2_ts = _h_ts[_w2_start:_w2_end]
+    _w2_post_demand = _h_post_demand[_w2_start:_w2_end]
+    _w2_self_c = _h_self_c[_w2_start:_w2_end]
+    _w2_labels = [f"{t[0]}/{t[1]} {t[2]:02d}:00" for t in _w2_ts]
+    _w2_tickvals = [i for i, t in enumerate(_w2_ts) if t[2] == 0]
+    _w2_ticktext = [f"{_w2_ts[i][0]}/{_w2_ts[i][1]}" for i in _w2_tickvals]
+
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(
+        x=list(range(len(_w2_post_demand))), y=_w2_post_demand,
+        mode="lines", name="PV導入後 使用電力量",
+        line=dict(color="royalblue", width=1.5),
+        hovertext=_w2_labels,
+    ))
+    fig2.add_trace(go.Scatter(
+        x=list(range(len(_w2_self_c))), y=_w2_self_c,
+        mode="lines", name="自家消費量", fill="tozeroy",
+        line=dict(color="orange", width=0.5),
+        fillcolor="rgba(255,165,0,0.3)",
+        hovertext=_w2_labels,
+    ))
+    fig2.add_hline(
+        y=_pre_peak_val, line_dash="dash", line_color="red", line_width=1.5,
+        annotation_text=f"導入前ピーク {_pre_peak_val:,.0f} kW",
+        annotation_position="top left",
+    )
+    fig2.add_hline(
+        y=_post_peak_val, line_dash="dash", line_color="green", line_width=1.5,
+        annotation_text=f"導入後ピーク {_post_peak_val:,.0f} kW",
+        annotation_position="bottom left",
+    )
+    fig2.update_layout(
+        title="② PV導入後 ピーク期間",
+        xaxis=dict(
+            tickvals=_w2_tickvals, ticktext=_w2_ticktext,
+            title="日付",
+        ),
+        yaxis=dict(title="電力量 (kW)"),
+        height=350, margin=dict(t=40, b=40, l=50, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
 
 def _parse_sf_output(val) -> float:
@@ -726,10 +974,39 @@ def _restore_widget_keys(data: dict) -> None:
         "fip_premium_yen_per_kwh": "fip_premium",
         "fip_market_price": "fip_market_price",
         "fip_balancing_rate": "fip_balancing_rate",
+        "tax_display": "tax_display_radio",
+        "ff_current_situation": "ff_current_input",
+        "ff_customer_needs": "ff_needs_input",
+        "ff_mgmt_needs": "ff_mgmt_input",
+        "ff_constraints": "ff_constraints_input",
     }
     for src, dst in _DIRECT.items():
         if src in data and data[src] is not None:
             st.session_state[dst] = data[src]
+
+    # 提案日: ISO string -> datetime.date for the date_input widget
+    if data.get("proposal_date"):
+        try:
+            import datetime as _dt_restore
+            st.session_state["proposal_date_input"] = _dt_restore.date.fromisoformat(
+                str(data["proposal_date"])[:10]
+            )
+        except (ValueError, TypeError):
+            pass
+
+    # Float-typed number_inputs (coerce — JSON may hold ints)
+    if data.get("surplus_price") is not None:
+        try:
+            st.session_state["surplus_price_input"] = float(data["surplus_price"])
+        except (ValueError, TypeError):
+            pass
+    if data.get("demand_reduction_kw") is not None:
+        try:
+            _dr_val = float(data["demand_reduction_kw"])
+            st.session_state["demand_reduction_input"] = _dr_val
+            st.session_state["demand_reduction_epc"] = _dr_val
+        except (ValueError, TypeError):
+            pass
 
     # Restore equipment lists (panels / pcs / batteries) via quote applier
     # so manual-mode widget keys get populated (panel_model_i etc.)
@@ -941,6 +1218,39 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # =========================================================================
 
 with tab1:
+    # ----- Autosave restore offer (shown once, before any data is entered) -----
+    _cd_now = st.session_state.get("customer_data", {})
+    if (
+        AUTOSAVE_PATH.exists()
+        and not st.session_state.get("_autosave_offered")
+        and not _cd_now.get("company_name")
+        and not _cd_now.get("office_name")
+    ):
+        try:
+            import datetime as _dt_auto
+            _auto_mtime = _dt_auto.datetime.fromtimestamp(AUTOSAVE_PATH.stat().st_mtime)
+            st.info(f"💾 前回の自動保存データがあります（{_auto_mtime:%Y-%m-%d %H:%M}）")
+            _auto_c1, _auto_c2, _ = st.columns([1, 1, 2])
+            with _auto_c1:
+                if st.button("前回の続きから再開", key="autosave_resume", type="primary"):
+                    with open(AUTOSAVE_PATH, "r", encoding="utf-8") as _af:
+                        _loaded = json.load(_af)
+                    st.session_state["customer_data"] = _loaded
+                    st.session_state["sf_company"] = _loaded.get("company_name", "")
+                    st.session_state["sf_office"] = _loaded.get("office_name", "")
+                    st.session_state["sf_address"] = _loaded.get("address", "")
+                    _restore_widget_keys(_loaded)
+                    st.session_state["_autosave_offered"] = True
+                    st.toast("自動保存データを読み込みました", icon="✅")
+                    st.rerun()
+            with _auto_c2:
+                if st.button("破棄して新規開始", key="autosave_dismiss"):
+                    st.session_state["_autosave_offered"] = True
+                    st.rerun()
+        except (OSError, json.JSONDecodeError) as _auto_err:
+            st.session_state["_autosave_offered"] = True
+            st.caption(f"自動保存データを読み込めませんでした: {_auto_err}")
+
     with st.expander("💾 案件データ 保存・読込", expanded=False):
         save_col, load_col = st.columns(2)
 
@@ -1237,13 +1547,13 @@ with tab1:
         else:
             st.caption("※取引先の企業規模を選択してください")
     with col2:
-        proposal_date = st.date_input("提案日")
+        proposal_date = st.date_input("提案日", key="proposal_date_input")
         _survey_options = ["", "実施済み", "未実施"]
         _survey_default = st.session_state.get("site_survey", "")
         _survey_idx = _survey_options.index(_survey_default) if _survey_default in _survey_options else 0
         site_survey = st.selectbox("現地調査", _survey_options, index=_survey_idx, key="site_survey")
     with col3:
-        tax_display = st.selectbox("提案書税表記", ["税抜", "税込"])
+        tax_display = st.selectbox("提案書税表記", ["税抜", "税込"], key="tax_display_radio")
         snow_depth = st.number_input(
             "垂直積雪量 (cm)", min_value=0, step=10,
             value=st.session_state.get("snow_depth", 0),
@@ -1610,228 +1920,32 @@ with tab2:
             help="iPals自家消費発電量CSVをアップロード → 年間発電量等を自動計算",
         )
         if ipals_file is not None:
-            import csv
-            import io
-            # Try cp932 (Shift_JIS) first, then utf-8
-            _raw = ipals_file.getvalue()
-            for _enc in ("cp932", "utf-8-sig", "utf-8"):
-                try:
-                    _text = _raw.decode(_enc)
-                    break
-                except (UnicodeDecodeError, LookupError):
-                    continue
-            else:
-                _text = _raw.decode("utf-8", errors="replace")
-
-            _reader = csv.reader(io.StringIO(_text))
-            _headers = next(_reader, [])
-            # Cols: 月,日,時,発電量(kWh),需要量(kWh),不足電力量(kWh),余剰電力量(kWh),自家消費電力量(kWh),自家消費率(%),消費率(%),モジュール出力(kWh)
-            _total_gen = 0.0
-            _total_demand = 0.0
-            _total_surplus = 0.0
-            _total_self_consume = 0.0
-            _monthly_gen = [0.0] * 12
-            _hourly_demand = []
-            _hourly_generation = []
-            _hourly_self_consumption = []
-            _hourly_timestamps = []
-            _row_count = 0
-            for _row in _reader:
-                if len(_row) < 8:
-                    continue
-                try:
-                    _month = int(_row[0])
-                    _day = int(_row[1])
-                    _hour = int(_row[2])
-                    _gen = float(_row[3]) if _row[3] and _row[3] != "-" else 0.0
-                    _demand = float(_row[4]) if _row[4] and _row[4] != "-" else 0.0
-                    _surplus = float(_row[6]) if _row[6] and _row[6] != "-" else 0.0
-                    _self_c = float(_row[7]) if _row[7] and _row[7] != "-" else 0.0
-                except (ValueError, IndexError):
-                    continue
-                _total_gen += _gen
-                _total_demand += _demand
-                _total_surplus += _surplus
-                _total_self_consume += _self_c
-                if 1 <= _month <= 12:
-                    _monthly_gen[_month - 1] += _gen
-                _hourly_demand.append(_demand)
-                _hourly_generation.append(_gen)
-                _hourly_self_consumption.append(_self_c)
-                _hourly_timestamps.append((_month, _day, _hour))
-                _row_count += 1
+            # Cached parse: heavy decode+aggregate runs only when file changes
+            _parsed = _parse_ipals_csv(ipals_file.getvalue())
+            _row_count = _parsed["row_count"]
 
             if _row_count > 0:
-                _self_rate = (_total_self_consume / _total_gen * 100) if _total_gen > 0 else 0.0
-                _co2_t = _total_gen * 0.000453  # t-CO2/kWh (2023 grid emission factor)
-
                 st.success(f"読み込み完了: {_row_count:,}行（{_row_count // 24}日分）")
                 _ic1, _ic2, _ic3, _ic4 = st.columns(4)
                 with _ic1:
-                    st.metric("年間発電量", f"{_total_gen:,.0f} kWh")
+                    st.metric("年間発電量", f"{_parsed['total_gen']:,.0f} kWh")
                 with _ic2:
-                    st.metric("自家消費量", f"{_total_self_consume:,.0f} kWh")
+                    st.metric("自家消費量", f"{_parsed['total_self_consume']:,.0f} kWh")
                 with _ic3:
-                    st.metric("自家消費率", f"{_self_rate:.1f}%")
+                    st.metric("自家消費率", f"{_parsed['self_rate']:.1f}%")
                 with _ic4:
-                    st.metric("余剰電力量", f"{_total_surplus:,.0f} kWh")
+                    st.metric("余剰電力量", f"{_parsed['total_surplus']:,.0f} kWh")
 
                 # Store in session state for slides
-                st.session_state["ipals_data"] = {
-                    "annual_gen_kwh": round(_total_gen),
-                    "annual_demand_kwh": round(_total_demand),
-                    "self_consumption_kwh": round(_total_self_consume),
-                    "self_consumption_pct": round(_self_rate, 1) / 100,
-                    "surplus_kwh": round(_total_surplus),
-                    "co2_annual_t": round(_co2_t, 1),
-                    "monthly_gen_kwh": [round(m) for m in _monthly_gen],
-                    "hourly_demand": _hourly_demand,
-                    "hourly_generation": _hourly_generation,
-                    "hourly_self_consumption": _hourly_self_consumption,
-                    "hourly_timestamps": _hourly_timestamps,
-                }
+                st.session_state["ipals_data"] = _parsed["ipals_data"]
             else:
                 st.error("CSVのパースに失敗しました。iPals出力形式を確認してください。")
 
     # ----- Demand Cut Graph -----
-    _ipals_hourly = st.session_state.get("ipals_data", {})
-    if _ipals_hourly.get("hourly_demand"):
+    if st.session_state.get("ipals_data", {}).get("hourly_demand"):
         with st.expander("📊 デマンドカット分析", expanded=False):
-            import plotly.graph_objects as go
-
-            _h_demand = _ipals_hourly["hourly_demand"]
-            _h_self_c = _ipals_hourly["hourly_self_consumption"]
-            _h_ts = _ipals_hourly["hourly_timestamps"]
-
-            # Post-solar demand = max(0, demand - self_consumption)
-            _h_post_demand = [max(0.0, d - sc) for d, sc in zip(_h_demand, _h_self_c)]
-
-            # Find pre-solar peak
-            _pre_peak_val = max(_h_demand)
-            _pre_peak_idx = _h_demand.index(_pre_peak_val)
-            _pre_peak_ts = _h_ts[_pre_peak_idx]
-
-            # Find post-solar peak
-            _post_peak_val = max(_h_post_demand)
-            _post_peak_idx = _h_post_demand.index(_post_peak_val)
-            _post_peak_ts = _h_ts[_post_peak_idx]
-
-            # KPIs
-            _dc_k1, _dc_k2, _dc_k3 = st.columns(3)
-            with _dc_k1:
-                st.metric(
-                    "導入前ピークデマンド",
-                    f"{_pre_peak_val:,.1f} kW",
-                    help=f"{_pre_peak_ts[0]}月{_pre_peak_ts[1]}日 {_pre_peak_ts[2]}時",
-                )
-            with _dc_k2:
-                st.metric(
-                    "導入後ピークデマンド",
-                    f"{_post_peak_val:,.1f} kW",
-                    help=f"{_post_peak_ts[0]}月{_post_peak_ts[1]}日 {_post_peak_ts[2]}時",
-                )
-            with _dc_k3:
-                _demand_cut = _pre_peak_val - _post_peak_val
-                st.metric("デマンド削減量", f"{_demand_cut:,.1f} kW")
-
-            def _extract_window(peak_idx, total_len):
-                """Extract ~12-day (288h) window around peak, aligned to midnight."""
-                # Find midnight of peak day (hour 0)
-                _peak_day_start = peak_idx - _h_ts[peak_idx][2]  # subtract hour
-                # Start 3 days before
-                _win_start = max(0, _peak_day_start - 3 * 24)
-                # End 9 days after start (total 12 days = 288 hours)
-                _win_end = min(total_len, _win_start + 12 * 24)
-                return _win_start, _win_end
-
-            _n_hours = len(_h_demand)
-
-            # --- Chart 1: Pre-solar peak period ---
-            _w1_start, _w1_end = _extract_window(_pre_peak_idx, _n_hours)
-            _w1_ts = _h_ts[_w1_start:_w1_end]
-            _w1_demand = _h_demand[_w1_start:_w1_end]
-            _w1_self_c = _h_self_c[_w1_start:_w1_end]
-            # X-axis labels
-            _w1_labels = [f"{t[0]}/{t[1]} {t[2]:02d}:00" for t in _w1_ts]
-            # Tick positions: show date at hour 0
-            _w1_tickvals = [i for i, t in enumerate(_w1_ts) if t[2] == 0]
-            _w1_ticktext = [f"{_w1_ts[i][0]}/{_w1_ts[i][1]}" for i in _w1_tickvals]
-
-            fig1 = go.Figure()
-            fig1.add_trace(go.Scatter(
-                x=list(range(len(_w1_demand))), y=_w1_demand,
-                mode="lines", name="使用電力量",
-                line=dict(color="royalblue", width=1.5),
-                hovertext=_w1_labels,
-            ))
-            fig1.add_trace(go.Scatter(
-                x=list(range(len(_w1_self_c))), y=_w1_self_c,
-                mode="lines", name="自家消費量", fill="tozeroy",
-                line=dict(color="orange", width=0.5),
-                fillcolor="rgba(255,165,0,0.3)",
-                hovertext=_w1_labels,
-            ))
-            fig1.add_hline(
-                y=_pre_peak_val, line_dash="dash", line_color="red", line_width=1.5,
-                annotation_text=f"ピーク {_pre_peak_val:,.0f} kW",
-                annotation_position="top left",
-            )
-            fig1.update_layout(
-                title="① PV導入前 ピーク期間",
-                xaxis=dict(
-                    tickvals=_w1_tickvals, ticktext=_w1_ticktext,
-                    title="日付",
-                ),
-                yaxis=dict(title="電力量 (kW)"),
-                height=350, margin=dict(t=40, b=40, l=50, r=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            )
-            st.plotly_chart(fig1, use_container_width=True)
-
-            # --- Chart 2: Post-solar peak period ---
-            _w2_start, _w2_end = _extract_window(_post_peak_idx, _n_hours)
-            _w2_ts = _h_ts[_w2_start:_w2_end]
-            _w2_post_demand = _h_post_demand[_w2_start:_w2_end]
-            _w2_self_c = _h_self_c[_w2_start:_w2_end]
-            _w2_labels = [f"{t[0]}/{t[1]} {t[2]:02d}:00" for t in _w2_ts]
-            _w2_tickvals = [i for i, t in enumerate(_w2_ts) if t[2] == 0]
-            _w2_ticktext = [f"{_w2_ts[i][0]}/{_w2_ts[i][1]}" for i in _w2_tickvals]
-
-            fig2 = go.Figure()
-            fig2.add_trace(go.Scatter(
-                x=list(range(len(_w2_post_demand))), y=_w2_post_demand,
-                mode="lines", name="PV導入後 使用電力量",
-                line=dict(color="royalblue", width=1.5),
-                hovertext=_w2_labels,
-            ))
-            fig2.add_trace(go.Scatter(
-                x=list(range(len(_w2_self_c))), y=_w2_self_c,
-                mode="lines", name="自家消費量", fill="tozeroy",
-                line=dict(color="orange", width=0.5),
-                fillcolor="rgba(255,165,0,0.3)",
-                hovertext=_w2_labels,
-            ))
-            fig2.add_hline(
-                y=_pre_peak_val, line_dash="dash", line_color="red", line_width=1.5,
-                annotation_text=f"導入前ピーク {_pre_peak_val:,.0f} kW",
-                annotation_position="top left",
-            )
-            fig2.add_hline(
-                y=_post_peak_val, line_dash="dash", line_color="green", line_width=1.5,
-                annotation_text=f"導入後ピーク {_post_peak_val:,.0f} kW",
-                annotation_position="bottom left",
-            )
-            fig2.update_layout(
-                title="② PV導入後 ピーク期間",
-                xaxis=dict(
-                    tickvals=_w2_tickvals, ticktext=_w2_ticktext,
-                    title="日付",
-                ),
-                yaxis=dict(title="電力量 (kW)"),
-                height=350, margin=dict(t=40, b=40, l=50, r=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+            # Fragment: chart interactions rerun only this block
+            _render_demand_cut_analysis()
 
     # ----- Contract Terms -----
     with st.expander("📋 契約条件", expanded=True):
@@ -1840,7 +1954,10 @@ with tab2:
             with ct_col1:
                 contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
             with ct_col2:
-                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
+                demand_reduction = st.number_input(
+                    "削減デマンド (kW)", min_value=0.0, step=1.0,
+                    key="demand_reduction_epc",
+                )
             ppa_unit_price = 0.0
             surplus_price = 0.0
         else:
@@ -1860,9 +1977,15 @@ with tab2:
                     help="下の「PPA単価自動試算」ボタンで自動入力できます",
                 )
             with ct_col3:
-                surplus_price = st.number_input("余剰売電単価 (円/kWh)", min_value=0.0, step=0.5)
+                surplus_price = st.number_input(
+                    "余剰売電単価 (円/kWh)", min_value=0.0, step=0.5,
+                    key="surplus_price_input",
+                )
             with ct_col4:
-                demand_reduction = st.number_input("削減デマンド (kW)", min_value=0.0, step=1.0)
+                demand_reduction = st.number_input(
+                    "削減デマンド (kW)", min_value=0.0, step=1.0,
+                    key="demand_reduction_input",
+                )
 
         # ----- Current Electricity Cost (contract master based) -----
         st.markdown("**現在の電気料金**")
@@ -2295,19 +2418,23 @@ with tab2:
             ff_current = st.text_area(
                 "現状・課題", height=90,
                 placeholder="例：月間電気代80万円、ピーク時のデマンド問題あり",
+                key="ff_current_input",
             )
             ff_needs = st.text_area(
                 "担当者のニーズ", height=80,
                 placeholder="例：稟議を通すための根拠資料が必要",
+                key="ff_needs_input",
             )
         with ff_col2:
             ff_mgmt = st.text_area(
                 "経営者へのアピールポイント", height=80,
                 placeholder="例：20年間の電気代削減額、ROI、環境対応",
+                key="ff_mgmt_input",
             )
             ff_constraints = st.text_area(
                 "制約・懸念事項", height=80,
                 placeholder="例：屋根の耐荷重確認が必要、補助金期限2026/6",
+                key="ff_constraints_input",
             )
 
     # ----- Estimate / Quotation data -----
@@ -2545,6 +2672,21 @@ with tab2:
             if _sell_price > 0:
                 _cd["investment_recovery_yr"] = round(float(_sell_price) / _annual_saving, 1)
 
+    # ----- Autosave (best-effort; Streamlit Cloud disk is ephemeral) -----
+    if company_name or office_name:
+        try:
+            import hashlib as _hashlib
+            _auto_json = json.dumps(
+                st.session_state["customer_data"],
+                ensure_ascii=False, default=str,
+            )
+            _auto_hash = _hashlib.md5(_auto_json.encode("utf-8")).hexdigest()
+            if _auto_hash != st.session_state.get("_autosave_hash"):
+                AUTOSAVE_PATH.write_text(_auto_json, encoding="utf-8")
+                st.session_state["_autosave_hash"] = _auto_hash
+        except (OSError, TypeError, ValueError):
+            pass  # never block the app on autosave failures
+
 # =========================================================================
 # Tab 3: Slide Composition
 # =========================================================================
@@ -2604,29 +2746,40 @@ with tab3:
 
         st.divider()
         st.write("**② ドラッグで順序を変更**")
-        if checked_slides:
-            # Include slide count + hash in key so list refreshes on checkbox changes
-            _sort_key = f"sort_{persona}_{len(checked_slides)}_{hash(tuple(checked_slides))}"
+        # Custom-added slides flow through the same ordering model as the
+        # profile checkboxes (persisted in custom_added_slides across reruns)
+        _custom_added = st.session_state.get("custom_added_slides", [])
+        _current_checked = checked_slides + [
+            s for s in _custom_added if s not in checked_slides
+        ]
+        if _current_checked:
+            # Persisted hand-made order merged with the current checked set:
+            # keep prior order for still-checked slides, append newly checked
+            # ones at the end. Stable sorter key so a checkbox change does
+            # NOT reset the drag order.
+            _prev_order = st.session_state.get("slide_order", [])
+            _merged = [s for s in _prev_order if s in _current_checked] + [
+                s for s in _current_checked if s not in _prev_order
+            ]
             sorted_slides = sort_items(
                 [
                     f"{sid}  ─  {catalog.get(sid, {}).get('title', sid)}"
-                    for sid in checked_slides
+                    for sid in _merged
                 ],
                 direction="vertical",
                 custom_style=_SORTABLE_STYLE,
-                key=_sort_key,
+                key="slide_sorter",
             )
             final_slides = [item.split("  ─  ")[0].strip() for item in sorted_slides]
-            # Merge custom-added slides so they survive reruns (checkbox/sort
-            # changes would otherwise wipe them from selected_slides)
-            _custom_added = st.session_state.get("custom_added_slides", [])
-            final_slides = final_slides + [s for s in _custom_added if s not in final_slides]
+            # sort_items with a stable key can return a stale order right
+            # after the item set changes — prefer merged when sets differ.
+            if set(final_slides) != set(_merged):
+                final_slides = _merged
+            st.session_state["slide_order"] = final_slides
             st.session_state["selected_slides"] = final_slides
         else:
-            _custom_added = st.session_state.get("custom_added_slides", [])
-            if not _custom_added:
-                st.warning("スライドが選択されていません")
-            st.session_state["selected_slides"] = list(_custom_added)
+            st.warning("スライドが選択されていません")
+            st.session_state["selected_slides"] = []
 
     # ------------------------------------------------------------------
     # Advanced: Custom slide composition (for irregular cases like FIP)
@@ -2817,7 +2970,26 @@ with tab4:
         st.caption("⚠️ 取引先名が未入力のため生成できません。Tab① でSalesforce検索または手動入力してください。")
 
     if generate_btn:
-        with st.spinner("生成中..."):
+        with st.status("提案書を生成しています...", expanded=True) as _gen_status:
+            st.write("1/3 入力検証...")
+            _validation_errors: list[str] = []
+            if not customer_data.get("company_name"):
+                _validation_errors.append("取引先名が未入力です（Tab① で入力してください）")
+            if (customer_data.get("panel_total_kw", 0) or 0) <= 0:
+                _validation_errors.append("パネル容量が 0 kW です（Tab② で入力してください）")
+            if not _is_epc_tab4 and (customer_data.get("ppa_unit_price", 0) or 0) <= 0:
+                _validation_errors.append("PPA単価が 0 円/kWh です（Tab② で入力または自動試算してください）")
+            if not selected_slides:
+                _validation_errors.append("スライドが選択されていません（Tab③ で選択してください）")
+            if _validation_errors:
+                _gen_status.update(label="入力に不備があります", state="error")
+                st.error(
+                    "入力に不備があります:\n"
+                    + "\n".join(f"- {_e}" for _e in _validation_errors)
+                )
+                st.stop()
+
+            st.write("2/3 スライド生成...")
             data = dict(customer_data)
             _gen_results: list[str] = []
 
@@ -2875,10 +3047,14 @@ with tab4:
                 st.session_state["last_pptx_filename"] = filename
                 st.session_state["last_pptx_results"] = _gen_results
             except Exception as e:
+                _gen_status.update(label="生成エラー", state="error")
                 st.error(f"生成エラー: {e}")
                 raise
             finally:
                 output_path.unlink(missing_ok=True)
+
+            st.write("3/3 完了")
+            _gen_status.update(state="complete", label=f"生成完了: {len(selected_slides)}枚")
 
     # ----- Persistent output block (survives reruns; renders right after
     #       generation too, since it sits below the if-block) -----

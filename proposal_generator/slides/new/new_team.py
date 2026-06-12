@@ -1,117 +1,119 @@
 """
-new_team.py - ご支援体制図 (Support Team Structure)
+new_team.py - ご支援体制図 (design v2: Institutional Trust Grid)
 
-Dummy placeholder slide showing department columns with photo placeholders.
-Departments: 営業, 設計・開発, 施工管理, O&M・保守, モニタリング
+Placeholder slide showing 5 department cards (営業 / 設計・開発 / 施工管理 /
+O&M・保守 / モニタリング) as white cards with top accents and circle
+number markers for the flow. Photo placeholders are hairline-framed
+circles with 9pt captions; names / roles / duties stay as placeholders.
 """
 from __future__ import annotations
+
 from pathlib import Path
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches
+
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.util import Inches, Pt
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_GRAY, C_NAVY, C_ORANGE, C_SUB, C_WHITE,
-    FONT_BLACK, FONT_BODY, HEADER_H, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_FAINT, C_HAIR, C_NAVY, C_SUB,
+    FONT_BLACK, FONT_BODY, GAP_CARD, MARGIN, SIZE_BODY, SIZE_CAPTION,
+    SIZE_SMALL, SLIDE_W,
+    add_card_with_accent, add_footer, add_header_bar, add_number_marker,
+    add_multiline_textbox, add_oval, add_textbox, vstack,
 )
 
 TITLE = "ご支援体制図"
+EYEBROW = "補足｜ご支援体制"
+
+DEPARTMENTS = [
+    ("営業", "Sales"),
+    ("設計・開発", "Engineering"),
+    ("施工管理", "Construction"),
+    ("O&M・保守", "Maintenance"),
+    ("モニタリング", "Monitoring"),
+]
+
+
+def _photo_placeholder(slide, x, y, d) -> None:
+    """Hairline-framed circle with a 9pt 'PHOTO' caption inside."""
+    shape = add_oval(slide, x, y, d, d,
+                     fill_color=None, border_color=C_HAIR, border_pt=1.0)
+    tf = shape.text_frame
+    tf.word_wrap = False
+    tf.margin_left = Pt(0)
+    tf.margin_right = Pt(0)
+    tf.margin_top = Pt(0)
+    tf.margin_bottom = Pt(0)
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    run = p.add_run()
+    run.text = "PHOTO"
+    run.font.name = FONT_BODY
+    run.font.size = Pt(SIZE_CAPTION)
+    run.font.color.rgb = C_FAINT
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
-    y = CONTENT_TOP + Inches(0.05)
+    content_w = SLIDE_W - MARGIN * 2
 
-    # Subtitle
-    add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.45),
+    # ---- Vertical layout: lead + card band + note ----
+    lead_h = Inches(0.26)
+    card_h = Inches(4.40)
+    note_h = Inches(0.22)
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM, [lead_h, card_h, note_h])
+
+    add_textbox(slide, MARGIN, ys[0], content_w, lead_h,
                 "マーケティング～販売～支援～設計～開発～施工～分析～メンテナンス",
-                font_name=FONT_BODY, font_size_pt=12, font_color=C_SUB,
+                font_size_pt=SIZE_BODY, font_color=C_SUB,
                 align=PP_ALIGN.CENTER)
-    y += Inches(0.55)
 
-    # Department columns
-    departments = [
-        ("営業", "Sales"),
-        ("設計・開発", "Engineering"),
-        ("施工管理", "Construction"),
-        ("O&M・保守", "Maintenance"),
-        ("モニタリング", "Monitoring"),
-    ]
+    # ---- 5 department cards ----
+    n_cols = len(DEPARTMENTS)
+    card_w = (int(content_w) - int(GAP_CARD) * (n_cols - 1)) // n_cols
 
-    n_cols = len(departments)
-    col_gap = Inches(0.15)
-    total_gap = col_gap * (n_cols - 1)
-    col_w = (SLIDE_W - MARGIN * 2 - total_gap) / n_cols
-    col_h = Inches(4.8)
+    for i, (dept_ja, dept_en) in enumerate(DEPARTMENTS):
+        x = int(MARGIN) + i * (card_w + int(GAP_CARD))
+        cx, cy, cw, ch = add_card_with_accent(slide, x, ys[1], card_w,
+                                              card_h, accent_position="top")
+        center_x = x + card_w // 2
 
-    for i, (dept_ja, dept_en) in enumerate(departments):
-        cx = MARGIN + i * (col_w + col_gap)
+        # Flow number marker (1..5)
+        add_number_marker(slide, center_x, cy + Inches(0.22), str(i + 1),
+                          diameter=Inches(0.32))
 
-        # Column background card
-        add_rounded_rect(slide, cx, y, col_w, col_h, C_LIGHT_GRAY)
+        # Department name (ja bold + en caption)
+        add_multiline_textbox(
+            slide, cx, cy + Inches(0.46), cw, Inches(0.52),
+            [
+                (dept_ja, FONT_BLACK, 12, C_NAVY, True, PP_ALIGN.CENTER),
+                (dept_en, FONT_BODY, SIZE_SMALL, C_SUB, False,
+                 PP_ALIGN.CENTER),
+            ],
+            line_spacing=1.2)
 
-        # Department header bar (navy)
-        add_rect(slide, cx, y, col_w, Inches(0.45), C_NAVY)
-        add_textbox(slide, cx, y + Inches(0.05), col_w, Inches(0.35),
-                    dept_ja,
-                    font_name=FONT_BLACK, font_size_pt=12,
-                    font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
+        # Photo placeholder: hairline circle + 9pt caption
+        photo_d = Inches(1.00)
+        _photo_placeholder(slide, center_x - int(photo_d) // 2,
+                           cy + Inches(1.10), photo_d)
 
-        # English sub-label
-        add_textbox(slide, cx, y + Inches(0.50), col_w, Inches(0.25),
-                    dept_en,
-                    font_name=FONT_BODY, font_size_pt=8,
-                    font_color=C_SUB, align=PP_ALIGN.CENTER)
+        # Name / role / duties placeholders
+        add_multiline_textbox(
+            slide, cx, cy + Inches(2.30), cw, ch - Inches(2.30),
+            [
+                ("担当者名", FONT_BLACK, 11, C_DARK, True, PP_ALIGN.CENTER),
+                ("役職", FONT_BODY, SIZE_CAPTION, C_SUB, False,
+                 PP_ALIGN.CENTER),
+                ("担当業務の説明をここに記入", FONT_BODY, SIZE_CAPTION,
+                 C_SUB, False, PP_ALIGN.CENTER),
+            ],
+            word_wrap=True, line_spacing=1.5)
 
-        # Photo placeholder circle (gray oval shape)
-        circle_size = Inches(1.0)
-        circle_x = cx + (col_w - circle_size) / 2
-        circle_y = y + Inches(1.0)
-        shape = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            int(circle_x), int(circle_y), int(circle_size), int(circle_size),
-        )
-        shape.fill.solid()
-        shape.fill.fore_color.rgb = C_SUB
-        shape.line.fill.background()
-
-        # Photo icon text (person silhouette placeholder)
-        add_textbox(slide, circle_x, circle_y + Inches(0.25),
-                    circle_size, Inches(0.5),
-                    "PHOTO",
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_WHITE, align=PP_ALIGN.CENTER)
-
-        # Name placeholder
-        add_textbox(slide, cx, y + Inches(2.2), col_w, Inches(0.35),
-                    "担当者名",
-                    font_name=FONT_BLACK, font_size_pt=13,
-                    font_color=C_DARK, bold=True, align=PP_ALIGN.CENTER)
-
-        # Role placeholder
-        add_textbox(slide, cx, y + Inches(2.55), col_w, Inches(0.30),
-                    "役職",
-                    font_name=FONT_BODY, font_size_pt=10,
-                    font_color=C_SUB, align=PP_ALIGN.CENTER)
-
-        # Orange accent line under role
-        line_w = col_w * 0.6
-        line_x = cx + (col_w - line_w) / 2
-        add_rect(slide, line_x, y + Inches(2.90), line_w, Inches(0.03), C_ORANGE)
-
-        # Responsibility description placeholder
-        add_textbox(slide, cx + Inches(0.1), y + Inches(3.1),
-                    col_w - Inches(0.2), Inches(1.5),
-                    "担当業務の説明を\nここに記入",
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_SUB, align=PP_ALIGN.CENTER)
-
-    # Footer note
-    note_y = y + col_h + Inches(0.15)
-    add_textbox(slide, MARGIN, note_y, SLIDE_W - MARGIN * 2, Inches(0.30),
+    # ---- Note ----
+    add_textbox(slide, MARGIN, ys[2], content_w, note_h,
                 "※ 詳細は後日記入",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_SUB, align=PP_ALIGN.RIGHT)
+                font_size_pt=SIZE_CAPTION, font_color=C_SUB,
+                align=PP_ALIGN.RIGHT)
 
     add_footer(slide)

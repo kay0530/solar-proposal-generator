@@ -1,51 +1,41 @@
 """
-new_env.py - 環境への貢献スライド
+new_env.py - 環境への貢献スライド (design v2: Institutional Trust Grid)
 
-CO2 reduction equivalent visualization.
-Cards: CO2削減量(t), 杉の木換算(本), ガソリン換算(L).
-SDGs alignment badges (Goal 7, 13).
-Environmental certifications mention.
+CO2 reduction equivalents as three 28pt KPI cards with flat leaf icons
+(CO2削減量 / 杉の木換算 / ガソリン換算), then SDGs alignment cards
+(Goal 7, 13) and an environmental-certification panel — all inside the
+v2 palette (no SDG brand colors, no emoji glyph icons).
 """
 from __future__ import annotations
+
 from pathlib import Path
-from pptx.dml.color import RGBColor
+
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    C_LIGHT_GRAY,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_section_header, fmt_num,
+    CARD_PAD, CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_HAIR, C_NAVY, C_PANEL,
+    C_SUB, C_WHITE, FONT_BLACK, FONT_BODY, MARGIN,
+    SIZE_CAPTION, SIZE_BODY, SIZE_SMALL, SLIDE_W,
+    add_footer, add_header_bar, add_icon, add_kpi_card,
+    add_multiline_textbox, add_rect, add_rounded_rect, add_section_header,
+    add_textbox, fmt_num, grid_w, grid_x, vstack,
 )
 
 TITLE = "環境への貢献"
-
-# SDGs color palette
-C_SDG7 = RGBColor(0xFC, 0xC3, 0x0B)   # SDG7 Affordable and Clean Energy (yellow)
-C_SDG13 = RGBColor(0x3F, 0x7E, 0x44)  # SDG13 Climate Action (green)
-C_GREEN = RGBColor(0x2E, 0x7D, 0x32)  # General green accent
+EYEBROW = "補足｜環境価値"
 
 # Conversion factors (approximate)
-SUGI_PER_TON_CO2 = 71.4    # cedar trees per ton CO2 absorbed/year
+SUGI_PER_TON_CO2 = 71.4     # cedar trees per ton CO2 absorbed/year
 GASOLINE_PER_TON_CO2 = 430  # liters of gasoline per ton CO2
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
-    y = CONTENT_TOP + Inches(0.05)
-
-    # Subtitle
+    content_w = SLIDE_W - MARGIN * 2
     company = data.get("company_name", "") or ""
-    add_textbox(slide, MARGIN, y,
-                SLIDE_W - MARGIN * 2, Inches(0.28),
-                f"{company}　様の太陽光導入による環境貢献効果",
-                font_name=FONT_BODY, font_size_pt=12,
-                font_color=C_SUB)
-    y += Inches(0.35)
 
-    # ---- CO2 equivalent cards (3 cards) ----
     co2_annual = data.get("co2_annual_t")
     try:
         co2_val = float(co2_annual) if co2_annual is not None else 85.0
@@ -55,144 +45,93 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     sugi_count = co2_val * SUGI_PER_TON_CO2
     gasoline_liters = co2_val * GASOLINE_PER_TON_CO2
 
+    # ---- Vertical layout ----
+    lead_h = Inches(0.26)
+    kpi_h = Inches(1.30)
+    detail_h = Inches(0.50)
+    kpi_block_h = kpi_h + Inches(0.08) + detail_h
+    sdg_card_h = Inches(1.60)
+    sdg_block_h = Inches(0.40) + sdg_card_h
+    note_h = Inches(0.20)
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
+                [lead_h, kpi_block_h, sdg_block_h, note_h])
+
+    # ---- Lead ----
+    lead = (f"{company}　様の太陽光導入による環境貢献効果"
+            if company else "太陽光発電導入による環境貢献効果")
+    add_textbox(slide, MARGIN, ys[0], content_w, lead_h, lead,
+                font_size_pt=SIZE_BODY, font_color=C_SUB)
+
+    # ---- CO2 equivalent KPI cards (28pt) + leaf icons + detail captions ----
+    kpi_y = ys[1]
     cards = [
-        {
-            "icon": "🌿",
-            "number": fmt_num(co2_val, 1),
-            "unit": "t-CO₂/年",
-            "label": "年間CO₂削減量",
-            "detail": "再生可能エネルギー発電による\n温室効果ガス排出削減効果",
-        },
-        {
-            "icon": "🌲",
-            "number": f"{sugi_count:,.0f}",
-            "unit": "本相当",
-            "label": "杉の木換算",
-            "detail": "杉の木が1年間に吸収する\nCO₂量に換算した本数",
-        },
-        {
-            "icon": "⛽",
-            "number": f"{gasoline_liters:,.0f}",
-            "unit": "L相当",
-            "label": "ガソリン換算",
-            "detail": "ガソリン燃焼で排出される\nCO₂量に換算したリットル数",
-        },
+        (fmt_num(co2_val, 1), "t-CO₂/年", "年間CO₂削減量",
+         "再生可能エネルギー発電による温室効果ガス排出削減効果"),
+        (f"{sugi_count:,.0f}", "本相当", "杉の木換算",
+         "杉の木が1年間に吸収するCO₂量に換算した本数"),
+        (f"{gasoline_liters:,.0f}", "L相当", "ガソリン換算",
+         "ガソリン燃焼で排出されるCO₂量に換算したリットル数"),
     ]
+    for i, (number, unit, label, detail) in enumerate(cards):
+        x = grid_x(i * 4)
+        w = grid_w(4)
+        add_kpi_card(slide, x, kpi_y, w, kpi_h, number, unit, label)
+        add_icon(slide, "leaf", x + w - Inches(0.55), kpi_y + Inches(0.14),
+                 size=Inches(0.36))
+        add_textbox(slide, x + Inches(0.02), kpi_y + kpi_h + Inches(0.08),
+                    w - Inches(0.04), detail_h, detail,
+                    font_size_pt=SIZE_CAPTION, font_color=C_SUB,
+                    word_wrap=True, line_spacing=1.3)
 
-    card_cols = 3
-    card_gap = Inches(0.2)
-    card_w = (SLIDE_W - MARGIN * 2 - card_gap * (card_cols - 1)) / card_cols
-    card_h = Inches(2.5)
+    # ---- SDGs alignment + environmental certifications ----
+    sdg_y = ys[2]
+    add_section_header(slide, MARGIN, sdg_y, content_w, "SDGsへの貢献")
+    card_y = sdg_y + Inches(0.40)
 
-    for i, card in enumerate(cards):
-        cx = MARGIN + i * (card_w + card_gap)
+    sdg_items = [
+        ("SDG 7", "エネルギーをみんなに そしてクリーンに",
+         "再生可能エネルギーの導入拡大に貢献"),
+        ("SDG 13", "気候変動に具体的な対策を",
+         "CO₂排出削減で気候変動対策に貢献"),
+    ]
+    for i, (tag, sdg_title, sdg_desc) in enumerate(sdg_items):
+        x = grid_x(i * 4)
+        w = grid_w(4)
+        add_rounded_rect(slide, x, card_y, w, sdg_card_h, C_WHITE,
+                         border_color=C_HAIR, border_pt=0.75)
+        add_multiline_textbox(
+            slide, x + CARD_PAD, card_y + CARD_PAD,
+            w - CARD_PAD * 2, sdg_card_h - CARD_PAD * 2,
+            [
+                (tag, FONT_BLACK, SIZE_CAPTION, C_NAVY, True, PP_ALIGN.LEFT),
+                (sdg_title, FONT_BODY, 10.5, C_DARK, True, PP_ALIGN.LEFT),
+                (sdg_desc, FONT_BODY, SIZE_CAPTION, C_SUB, False,
+                 PP_ALIGN.LEFT),
+            ],
+            line_spacing=1.5)
 
-        # Card background
-        add_rounded_rect(slide, cx, y, card_w, card_h, C_LIGHT_ORANGE, radius_pt=6.0)
+    # Certification panel (C_PANEL + navy left bar)
+    cert_x = grid_x(8)
+    cert_w = grid_w(4)
+    add_rect(slide, cert_x, card_y, cert_w, sdg_card_h, C_PANEL)
+    add_rect(slide, cert_x, card_y, Inches(0.045), sdg_card_h, C_NAVY)
+    add_multiline_textbox(
+        slide, cert_x + Inches(0.045) + CARD_PAD, card_y + CARD_PAD,
+        cert_w - Inches(0.045) - CARD_PAD * 2, sdg_card_h - CARD_PAD * 2,
+        [
+            ("環境認証・制度への活用", FONT_BLACK, 10.5, C_DARK, True,
+             PP_ALIGN.LEFT),
+            ("RE100 / SBT / CDP", FONT_BODY, SIZE_CAPTION, C_SUB, False,
+             PP_ALIGN.LEFT),
+            ("グリーン電力証書・非化石証書", FONT_BODY, SIZE_CAPTION, C_SUB,
+             False, PP_ALIGN.LEFT),
+        ],
+        line_spacing=1.5)
 
-        # Green top accent bar
-        add_rect(slide, cx, y, card_w, Inches(0.06), C_GREEN)
-
-        # Icon
-        add_textbox(slide, cx, y + Inches(0.12),
-                    card_w, Inches(0.4),
-                    card["icon"],
-                    font_name=FONT_BODY, font_size_pt=28,
-                    font_color=C_DARK,
-                    align=PP_ALIGN.CENTER)
-
-        # Number (large)
-        add_textbox(slide, cx, y + Inches(0.55),
-                    card_w, Inches(0.5),
-                    card["number"],
-                    font_name=FONT_BLACK, font_size_pt=30,
-                    font_color=C_ORANGE, bold=True,
-                    align=PP_ALIGN.CENTER)
-
-        # Unit
-        add_textbox(slide, cx, y + Inches(1.05),
-                    card_w, Inches(0.22),
-                    card["unit"],
-                    font_name=FONT_BODY, font_size_pt=10,
-                    font_color=C_SUB,
-                    align=PP_ALIGN.CENTER)
-
-        # Label
-        add_textbox(slide, cx + Inches(0.08), y + Inches(1.3),
-                    card_w - Inches(0.16), Inches(0.26),
-                    card["label"],
-                    font_name=FONT_BODY, font_size_pt=11,
-                    font_color=C_DARK, bold=True,
-                    align=PP_ALIGN.CENTER)
-
-        # Divider
-        add_rect(slide, cx + Inches(0.1), y + Inches(1.58),
-                 card_w - Inches(0.2), Inches(0.02), C_GREEN)
-
-        # Detail
-        add_textbox(slide, cx + Inches(0.1), y + Inches(1.65),
-                    card_w - Inches(0.2), Inches(0.7),
-                    card["detail"],
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_SUB,
-                    word_wrap=True)
-
-    y += card_h + Inches(0.2)
-
-    # ---- SDGs alignment section ----
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "SDGs への貢献", font_size_pt=12)
-    y += Inches(0.3)
-
-    # SDG badges side by side
-    badge_w = Inches(2.8)
-    badge_h = Inches(0.9)
-    badge_gap = Inches(0.3)
-    badges_total_w = badge_w * 2 + badge_gap
-    badge_start_x = MARGIN
-
-    # SDG 7
-    add_rounded_rect(slide, badge_start_x, y, badge_w, badge_h, C_SDG7, radius_pt=6.0)
-    add_textbox(slide, badge_start_x + Inches(0.1), y + Inches(0.08),
-                badge_w - Inches(0.2), Inches(0.3),
-                "SDG 7: エネルギーをみんなに そしてクリーンに",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_WHITE, bold=True)
-    add_textbox(slide, badge_start_x + Inches(0.1), y + Inches(0.42),
-                badge_w - Inches(0.2), Inches(0.4),
-                "再生可能エネルギーの導入拡大に貢献",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_WHITE)
-
-    # SDG 13
-    add_rounded_rect(slide, badge_start_x + badge_w + badge_gap, y,
-                     badge_w, badge_h, C_SDG13, radius_pt=6.0)
-    add_textbox(slide, badge_start_x + badge_w + badge_gap + Inches(0.1), y + Inches(0.08),
-                badge_w - Inches(0.2), Inches(0.3),
-                "SDG 13: 気候変動に具体的な対策を",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_WHITE, bold=True)
-    add_textbox(slide, badge_start_x + badge_w + badge_gap + Inches(0.1), y + Inches(0.42),
-                badge_w - Inches(0.2), Inches(0.4),
-                "CO₂排出削減で気候変動対策に貢献",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_WHITE)
-
-    # Environmental certifications note
-    cert_x = badge_start_x + badges_total_w + Inches(0.3)
-    cert_w = SLIDE_W - cert_x - MARGIN
-    add_rounded_rect(slide, cert_x, y, cert_w, badge_h, C_LIGHT_GRAY, radius_pt=6.0)
-    add_rect(slide, cert_x, y, Inches(0.05), badge_h, C_GREEN)
-    add_textbox(slide, cert_x + Inches(0.15), y + Inches(0.08),
-                cert_w - Inches(0.25), Inches(0.22),
-                "環境認証・制度への活用",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_DARK, bold=True)
-    add_textbox(slide, cert_x + Inches(0.15), y + Inches(0.32),
-                cert_w - Inches(0.25), Inches(0.5),
-                "RE100 / SBT / CDP\nグリーン電力証書\n非化石証書",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_SUB,
-                word_wrap=True)
+    # ---- Conversion-factor note (8pt) ----
+    add_textbox(slide, MARGIN, ys[3], content_w, note_h,
+                "※ 換算係数：杉の木 約71.4本/t-CO₂（年間吸収量）、"
+                "ガソリン 約430L/t-CO₂",
+                font_size_pt=SIZE_SMALL, font_color=C_SUB)
 
     add_footer(slide)

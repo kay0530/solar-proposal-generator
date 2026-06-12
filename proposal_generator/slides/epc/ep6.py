@@ -1,21 +1,33 @@
 """
-ep6.py - 補助金活用（EPC）
+ep6.py - 補助金活用（EPC） — design system v2
 
 Shows available subsidies for EPC solar system purchase.
+
+Layout (A4 landscape):
+  - KPI card row: 設備投資額 / 補助金額 / 実質負担額 (+投資回収年数 if present)
+  - Applied subsidy highlight band (C_PANEL + orange left bar + 28pt amount)
+  - All subsidy programs as full-width accent cards (no truncation; the
+    vstack layout absorbs the conditional highlight block)
+  - 8pt disclaimer note
 """
 from __future__ import annotations
+
 from pathlib import Path
-from pptx.enum.text import PP_ALIGN
+
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_GRAY, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_kpi_card, add_rect, add_rounded_rect,
-    add_section_header, add_textbox,
-    fmt_yen,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_ORANGE, C_PANEL, C_SUB,
+    FONT_BLACK, FONT_BODY, GAP_IN_CARD, MARGIN, SIZE_BODY, SIZE_CAPTION,
+    SIZE_SMALL, SLIDE_W,
+    add_card_with_accent, add_footer, add_header_bar, add_kpi_card,
+    add_multiline_textbox, add_number_unit, add_rect, add_section_header,
+    add_textbox, vstack,
 )
 
 TITLE = "補助金活用（EPC）"
+EYEBROW = "04｜補助金活用"
 
 SUBSIDY_PROGRAMS = [
     {
@@ -39,6 +51,21 @@ SUBSIDY_PROGRAMS = [
 ]
 
 
+def _yen_parts(v) -> tuple[str, str]:
+    """Split a yen amount into (number, unit) for add_number_unit / KPI."""
+    if v is None:
+        return "—", ""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v), ""
+    if abs(f) >= 1_0000_0000:
+        return f"{f / 1_0000_0000:.2f}", "億円"
+    if abs(f) >= 10_000:
+        return f"{f / 10_000:,.0f}", "万円"
+    return f"{f:,.0f}", "円"
+
+
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     """
     Render EP6 (subsidy utilization for EPC) onto an already-added blank slide.
@@ -47,100 +74,118 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         selling_price, subsidy_name, subsidy_amount, system_capacity_kw,
         investment_recovery_yr
     """
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
 
     selling_price  = data.get("selling_price")
     subsidy_name   = data.get("subsidy_name", "") or ""
     subsidy_amount = data.get("subsidy_amount", 0) or 0
-    capacity       = data.get("system_capacity_kw")
+    capacity       = data.get("system_capacity_kw")  # noqa: F841 (kept binding)
     recovery_yr    = data.get("investment_recovery_yr")
 
-    y = CONTENT_TOP + Inches(0.08)
-
-    # ---- KPI cards: investment vs subsidy ----
-    has_recovery = recovery_yr is not None and recovery_yr > 0
-    card_cols = 4 if has_recovery else 3
-    card_gap = Inches(0.14)
-    card_w = (SLIDE_W - MARGIN * 2 - card_gap * (card_cols - 1)) / card_cols
-    card_h = Inches(1.0)
+    try:
+        rec_f = float(recovery_yr) if recovery_yr is not None else None
+    except (TypeError, ValueError):
+        rec_f = None
+    has_recovery = rec_f is not None and rec_f > 0
 
     net_cost = None
     if selling_price is not None:
-        net_cost = selling_price - subsidy_amount
+        try:
+            net_cost = float(selling_price) - float(subsidy_amount)
+        except (TypeError, ValueError):
+            net_cost = None
+
+    total_w = SLIDE_W - MARGIN * 2
+
+    # ---- Block heights -> vstack (kills bottom dead space) ----
+    kpi_h = Inches(1.05)
+    hl_head_h = Inches(0.36)
+    hl_band_h = Inches(0.62)
+    sect_h = Inches(0.40)
+    prog_card_h = Inches(0.88)
+    prog_gap = Inches(0.12)
+    n_progs = len(SUBSIDY_PROGRAMS)
+    list_h = (int(sect_h) + int(prog_card_h) * n_progs
+              + int(prog_gap) * (n_progs - 1))
+    note_h = Inches(0.22)
+
+    has_highlight = bool(subsidy_name)
+    blocks = [kpi_h]
+    if has_highlight:
+        blocks.append(int(hl_head_h) + int(hl_band_h))
+    blocks += [list_h, note_h]
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM, blocks)
+
+    # ---- KPI cards: investment vs subsidy (28pt via add_kpi_card) ----
+    card_cols = 4 if has_recovery else 3
+    card_gap = GAP_IN_CARD
+    card_w = (int(total_w) - int(card_gap) * (card_cols - 1)) // card_cols
 
     kpis = [
-        (fmt_yen(selling_price), "", "設備投資額"),
-        (fmt_yen(subsidy_amount), "", "補助金額"),
-        (fmt_yen(net_cost), "", "実質負担額"),
+        (*_yen_parts(selling_price), "設備投資額"),
+        (*_yen_parts(subsidy_amount), "補助金額"),
+        (*_yen_parts(net_cost), "実質負担額"),
     ]
     if has_recovery:
-        kpis.append((f"{recovery_yr:.1f}", "年", "投資回収年数"))
+        kpis.append((f"{rec_f:.1f}", "年", "投資回収年数"))
 
     for i, (number, unit, label) in enumerate(kpis):
-        cx = MARGIN + i * (card_w + card_gap)
-        add_kpi_card(slide, cx, y, card_w, card_h,
-                     number, unit, label,
-                     number_size_pt=24)
+        cx = int(MARGIN) + i * (card_w + int(card_gap))
+        add_kpi_card(slide, cx, ys[0], card_w, kpi_h, number, unit, label)
 
-    y += card_h + Inches(0.22)
+    blk = 1
 
     # ---- Applied subsidy highlight (conditional) ----
-    has_highlight = bool(subsidy_name)
     if has_highlight:
-        add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2, "適用予定補助金")
-        y += Inches(0.32)
-        highlight_h = Inches(0.48)
-        add_rounded_rect(slide, MARGIN, y, SLIDE_W - MARGIN * 2, highlight_h, C_LIGHT_ORANGE)
-        add_rect(slide, MARGIN, y, Inches(0.08), highlight_h, C_ORANGE)
-        add_textbox(slide,
-                    MARGIN + Inches(0.18), y + Inches(0.10),
-                    SLIDE_W - MARGIN * 2 - Inches(0.25), highlight_h - Inches(0.16),
-                    f"{subsidy_name}　→　補助金額：{fmt_yen(subsidy_amount)}",
-                    font_name=FONT_BODY, font_size_pt=12,
-                    font_color=C_DARK, bold=True)
-        y += highlight_h + Inches(0.18)
+        hy = ys[blk]
+        blk += 1
+        add_section_header(slide, MARGIN, hy, total_w, "適用予定補助金")
+        band_y = int(hy) + int(hl_head_h)
+        add_rect(slide, MARGIN, band_y, total_w, hl_band_h, C_PANEL)
+        add_rect(slide, MARGIN, band_y, Inches(0.05), hl_band_h, C_ORANGE)
 
-    # ---- Available subsidy programs ----
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2, "主な補助金制度一覧")
-    y += Inches(0.32)
+        name_w = int(total_w) * 55 // 100
+        add_textbox(slide, int(MARGIN) + int(Inches(0.18)), band_y,
+                    name_w, hl_band_h,
+                    subsidy_name,
+                    font_name=FONT_BLACK, font_size_pt=SIZE_BODY,
+                    font_color=C_DARK, bold=True, anchor=MSO_ANCHOR.MIDDLE)
 
-    # Limit cards to avoid overflow: 2 if highlight is shown, 3 otherwise
-    max_programs = 2 if has_highlight else 3
-    programs_to_show = SUBSIDY_PROGRAMS[:max_programs]
+        amt_num, amt_unit = _yen_parts(subsidy_amount)
+        amt_x = int(MARGIN) + name_w + int(Inches(0.20))
+        amt_w = int(total_w) - name_w - int(Inches(0.38))
+        add_textbox(slide, amt_x, band_y + int(Inches(0.06)),
+                    amt_w, Inches(0.16),
+                    "補助金額",
+                    font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                    font_color=C_SUB, bold=True, align=PP_ALIGN.RIGHT)
+        add_number_unit(slide, amt_x, band_y + int(Inches(0.20)),
+                        amt_w, int(hl_band_h) - int(Inches(0.24)),
+                        amt_num, amt_unit, align=PP_ALIGN.RIGHT)
 
-    card_h_item = Inches(0.78)
-    for prog in programs_to_show:
-        add_rounded_rect(slide, MARGIN, y, SLIDE_W - MARGIN * 2, card_h_item, C_LIGHT_GRAY)
-        add_rect(slide, MARGIN, y, Inches(0.06), card_h_item, C_ORANGE)
+    # ---- Available subsidy programs (all shown, accent-left cards) ----
+    ly = ys[blk]
+    add_section_header(slide, MARGIN, ly, total_w, "主な補助金制度一覧")
+    py = int(ly) + int(sect_h)
+    for prog in SUBSIDY_PROGRAMS:
+        cx, cy, cw, ch = add_card_with_accent(slide, MARGIN, py, total_w,
+                                              prog_card_h,
+                                              accent_position="left")
+        lines = [
+            (f"{prog['name']}（{prog['body']}）",
+             FONT_BODY, SIZE_BODY, C_DARK, True, PP_ALIGN.LEFT),
+            (f"補助率：{prog['rate']}",
+             FONT_BODY, SIZE_CAPTION, C_NAVY, True, PP_ALIGN.LEFT),
+            (prog["note"],
+             FONT_BODY, SIZE_CAPTION, C_SUB, False, PP_ALIGN.LEFT),
+        ]
+        add_multiline_textbox(slide, cx, cy, cw, ch, lines, line_spacing=1.35)
+        py += int(prog_card_h) + int(prog_gap)
 
-        # Program name
-        add_textbox(slide,
-                    MARGIN + Inches(0.16), y + Inches(0.04),
-                    SLIDE_W - MARGIN * 2 - Inches(0.2), Inches(0.22),
-                    f"{prog['name']}（{prog['body']}）",
-                    font_name=FONT_BODY, font_size_pt=10,
-                    font_color=C_DARK, bold=True)
-        # Rate
-        add_textbox(slide,
-                    MARGIN + Inches(0.16), y + Inches(0.28),
-                    Inches(3.5), Inches(0.20),
-                    f"補助率：{prog['rate']}",
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_ORANGE, bold=True)
-        # Note
-        add_textbox(slide,
-                    MARGIN + Inches(0.16), y + Inches(0.50),
-                    SLIDE_W - MARGIN * 2 - Inches(0.2), Inches(0.24),
-                    prog["note"],
-                    font_name=FONT_BODY, font_size_pt=8,
-                    font_color=C_SUB)
-        y += card_h_item + Inches(0.08)
-
-    # ---- Note ----
-    add_textbox(slide, MARGIN, y + Inches(0.02),
-                SLIDE_W - MARGIN * 2, Inches(0.22),
+    # ---- Note (8pt) ----
+    add_textbox(slide, MARGIN, ys[-1], total_w, note_h,
                 "※ 補助金の採択は申請内容・予算状況により異なります。詳細はお問い合わせください。",
-                font_name=FONT_BODY, font_size_pt=8,
+                font_name=FONT_BODY, font_size_pt=SIZE_SMALL,
                 font_color=C_SUB)
 
     add_footer(slide)

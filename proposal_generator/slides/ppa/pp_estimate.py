@@ -1,10 +1,11 @@
 """
-pp_estimate.py - PPA estimate reference slide
+pp_estimate.py - PPA概算費用参考資料 (design v2: Institutional Trust Grid)
 
-For PPA proposals, the customer doesn't pay upfront, so this slide shows:
-- Estimated facility value (設備概算価額) for reference
-- Monthly PPA fee estimate based on usage
-- 20-year total cost comparison (PPA vs grid)
+For PPA proposals the customer pays nothing upfront, so this slide shows:
+  - Estimated facility value (設備概算価額) for reference — 3 KPI cards
+  - PPA unit price + monthly fee estimate as an inline metric band
+  - Contract-period cost comparison as an audited-figures table
+    (savings column tinted, cumulative row as total row)
 
 This is a reference document, not a binding quote.
 """
@@ -14,20 +15,22 @@ import re
 from datetime import date
 from pathlib import Path
 
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches, Pt
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.util import Inches
 
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_GRAY, C_LIGHT_ORANGE, C_ORANGE, C_SUB,
-    C_WHITE, C_NAVY, C_TEAL, C_LIGHT_TEAL, C_BORDER,
-    FONT_BLACK, FONT_BODY, HEADER_H, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_line, add_section_header, add_kpi_card, _set_cell_bg,
-    fmt_yen, fmt_num,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_HAIR, C_NAVY, C_ORANGE,
+    C_PANEL, C_SUB,
+    FONT_BLACK, FONT_BODY, MARGIN, SIZE_BODY, SIZE_CAPTION, SIZE_H2,
+    SIZE_SMALL, SLIDE_W, TABLE_ROW_H,
+    add_footer, add_header_bar, add_kpi_card, add_line,
+    add_multiline_textbox, add_number_unit, add_rect,
+    add_section_header, add_table, add_textbox,
+    fmt_num, fmt_yen, grid_w, grid_x, vstack,
 )
 
 TITLE = "PPA概算費用参考資料"
+EYEBROW = "04｜ご契約条件"
 
 DEGRADATION = 0.005  # 0.5% annual degradation
 
@@ -35,7 +38,8 @@ DEGRADATION = 0.005  # 0.5% annual degradation
 def _fmt_date(val) -> str:
     """Format date string."""
     if not val:
-        return date.today().strftime("%Y年%m月%d日").replace("年0", "年").replace("月0", "月")
+        return (date.today().strftime("%Y年%m月%d日")
+                .replace("年0", "年").replace("月0", "月"))
     s = str(val).split(" ")[0]
     m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
     if m:
@@ -43,19 +47,25 @@ def _fmt_date(val) -> str:
     return s
 
 
-def _fmt_comma(val) -> str:
-    """Format number with commas."""
-    if val is None or val == 0:
-        return "-"
-    try:
-        return f"{int(val):,}"
-    except (TypeError, ValueError):
-        return str(val)
+def _yen_parts(v: float) -> tuple[str, str]:
+    """Split a yen amount into (number, unit) for KPI display."""
+    if v >= 1_0000_0000:
+        return f"{v / 1_0000_0000:.2f}", "億円"
+    if v >= 10_000:
+        return f"{v / 10_000:,.0f}", "万円"
+    return f"{v:,.0f}", "円"
+
+
+def _tbl_yen(v: float) -> str:
+    """Table cell: comma-grouped yen or em-dash."""
+    return f"{int(v):,}円" if v > 0 else "—"
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     """Render PP_ESTIMATE (PPA cost reference) onto a blank slide."""
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
+
+    content_w = SLIDE_W - MARGIN * 2
 
     company = data.get("company_name", "") or ""
     office = data.get("office_name", "") or ""
@@ -70,221 +80,143 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     annual_saving = float(data.get("annual_saving", 0) or 0)
     annual_cost = float(data.get("annual_cost", 0) or 0)
     capacity = float(data.get("system_capacity_kw", 0) or 0)
+    annual_kwh = float(data.get("annual_kwh", 0) or 0)
 
-    y = CONTENT_TOP
+    # ---- Derived figures ----
+    kw_price = (int(selling_price / capacity)
+                if capacity > 0 and selling_price > 0 else 0)
+    monthly_ppa = (int(self_kwh * ppa_price / 12)
+                   if self_kwh > 0 and ppa_price > 0 else 0)
 
-    # ---- Header: customer + date ----
-    customer_label = f"{company}"
-    if office:
-        customer_label += f"  {office}"
-    customer_label += "  御中"
-
-    add_textbox(slide, MARGIN, y, Inches(5.5), Inches(0.30),
-                customer_label,
-                font_name=FONT_BLACK, font_size_pt=14,
-                font_color=C_DARK, bold=True)
-    add_textbox(slide, SLIDE_W - MARGIN - Inches(3.0), y, Inches(3.0), Inches(0.22),
-                f"参考資料  {proposal_date}",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_SUB, align=PP_ALIGN.RIGHT)
-
-    y += Inches(0.40)
-
-    # ---- Notice box ----
-    notice_h = Inches(0.40)
-    add_rounded_rect(slide, MARGIN, y, SLIDE_W - MARGIN * 2, notice_h,
-                     C_LIGHT_ORANGE)
-    add_textbox(slide, MARGIN + Inches(0.15), y + Inches(0.05),
-                SLIDE_W - MARGIN * 2 - Inches(0.3), notice_h - Inches(0.1),
-                "PPAモデルでは設備費用のお客様負担はございません。"
-                "本資料は設備の概算価額と電力料金の参考情報です。",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_ORANGE, bold=True)
-
-    y += notice_h + Inches(0.20)
-
-    # ---- Section 1: Facility overview ----
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "設備概算価額（ご参考）", font_size_pt=12)
-    y += Inches(0.32)
-
-    # 3 KPI cards: system capacity, facility value, kW unit price
-    card_gap = Inches(0.15)
-    card_w = (SLIDE_W - MARGIN * 2 - card_gap * 2) / 3
-    card_h = Inches(0.90)
-
-    kw_price = int(selling_price / capacity) if capacity > 0 and selling_price > 0 else 0
-
-    kpis = [
-        (fmt_num(capacity, 1), "kW", "システム容量"),
-        (fmt_yen(selling_price), "", "設備概算価額"),
-        (f"{kw_price:,}" if kw_price else "-", "円/kW", "kW単価（参考）"),
-    ]
-    for i, (number, unit, label) in enumerate(kpis):
-        cx = MARGIN + i * (card_w + card_gap)
-        add_kpi_card(slide, cx, y, card_w, card_h,
-                     number, unit, label,
-                     bg_color=C_LIGHT_GRAY, number_size_pt=22)
-
-    y += card_h + Inches(0.20)
-
-    # ---- Section 2: PPA fee estimate ----
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "PPA電力料金お見積り", font_size_pt=12)
-    y += Inches(0.32)
-
-    # Two large boxes: PPA unit price + Monthly estimate
-    box_gap = Inches(0.25)
-    box_w = (SLIDE_W - MARGIN * 2 - box_gap) / 2
-    box_h = Inches(1.30)
-
-    # Left: PPA unit price
-    add_rounded_rect(slide, MARGIN, y, box_w, box_h, C_NAVY)
-    add_textbox(slide, MARGIN, y + Inches(0.10), box_w, Inches(0.22),
-                f"PPA電力単価（{tax_display}）",
-                font_name=FONT_BODY, font_size_pt=11,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    price_str = f"\\{ppa_price:.2f}" if ppa_price > 0 else "-"
-    add_textbox(slide, MARGIN, y + Inches(0.38), box_w, Inches(0.55),
-                price_str,
-                font_name=FONT_BLACK, font_size_pt=32,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    add_textbox(slide, MARGIN, y + Inches(0.90), box_w, Inches(0.22),
-                f"/kWh  x  {years}年間一律",
-                font_name=FONT_BODY, font_size_pt=12,
-                font_color=RGBColor(0xCC, 0xCC, 0xCC), align=PP_ALIGN.CENTER)
-
-    # Right: Monthly estimate
-    rx = MARGIN + box_w + box_gap
-    monthly_ppa = 0
-    if self_kwh > 0 and ppa_price > 0:
-        monthly_ppa = int(self_kwh * ppa_price / 12)
-
-    add_rounded_rect(slide, rx, y, box_w, box_h, C_LIGHT_TEAL)
-    add_textbox(slide, rx, y + Inches(0.10), box_w, Inches(0.22),
-                "月額電力料金（概算）",
-                font_name=FONT_BODY, font_size_pt=11,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    monthly_str = f"\\{monthly_ppa:,}" if monthly_ppa > 0 else "-"
-    add_textbox(slide, rx, y + Inches(0.38), box_w, Inches(0.55),
-                monthly_str,
-                font_name=FONT_BLACK, font_size_pt=32,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER)
-    add_textbox(slide, rx, y + Inches(0.90), box_w, Inches(0.22),
-                "/月（税別・初年度概算）",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=RGBColor(0xCC, 0xCC, 0xCC), align=PP_ALIGN.CENTER)
-
-    y += box_h + Inches(0.20)
-
-    # ---- Section 3: 20-year cost comparison table ----
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       f"{years}年間コスト比較", font_size_pt=12)
-    y += Inches(0.30)
-
-    # Build comparison table
-    table_w = SLIDE_W - MARGIN * 2
-    n_cols = 4
-    col_widths = [
-        Inches(2.8),   # Label
-        Inches(2.8),   # Current (grid only)
-        Inches(2.8),   # PPA
-        Inches(2.6),   # Savings
-    ]
-
-    # Calculate 20-year totals with degradation
-    total_ppa_cost = 0
-    total_grid_cost = 0
+    # Contract-period totals with degradation
+    total_ppa_cost = 0.0
+    total_grid_cost = 0.0
     if self_kwh > 0 and ppa_price > 0 and annual_cost > 0:
-        annual_kwh = float(data.get("annual_kwh", 0) or 0)
         avg_rate = annual_cost / annual_kwh if annual_kwh > 0 else 0
-
         for yr in range(years):
             decay = (1 - DEGRADATION) ** yr
             yr_self_kwh = self_kwh * decay
-            yr_ppa_cost = yr_self_kwh * ppa_price
-            yr_grid_cost = yr_self_kwh * avg_rate
-            total_ppa_cost += yr_ppa_cost
-            total_grid_cost += yr_grid_cost
-
+            total_ppa_cost += yr_self_kwh * ppa_price
+            total_grid_cost += yr_self_kwh * avg_rate
     total_saving = total_grid_cost - total_ppa_cost
 
+    # ---- Block heights for vertical justify ----
+    cust_h = Inches(0.32)
+    notice_h = Inches(0.46)
+    kpi_h = Inches(0.95)
+    block_kpi_h = int(Inches(0.36)) + int(kpi_h)
+    fee_h = Inches(0.86)
+    block_fee_h = int(Inches(0.36)) + int(fee_h)
+    table_h = int(TABLE_ROW_H) * 4
+    block_tbl_h = int(Inches(0.36)) + table_h
+    notes_h = Inches(0.56)
+
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
+                [cust_h, notice_h, block_kpi_h, block_fee_h,
+                 block_tbl_h, notes_h])
+
+    # ---- Customer + date row ----
+    customer_label = company
+    if office:
+        customer_label += f"  {office}"
+    customer_label += "  御中"
+    add_textbox(slide, MARGIN, ys[0], Inches(6.5), cust_h,
+                customer_label,
+                font_name=FONT_BLACK, font_size_pt=SIZE_H2,
+                font_color=C_DARK, bold=True)
+    add_textbox(slide, SLIDE_W - MARGIN - Inches(3.0), ys[0],
+                Inches(3.0), Inches(0.22),
+                f"参考資料  {proposal_date}",
+                font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                font_color=C_SUB, align=PP_ALIGN.RIGHT)
+
+    # ---- Notice band (panel + orange bar) ----
+    add_rect(slide, MARGIN, ys[1], content_w, notice_h, C_PANEL)
+    add_rect(slide, MARGIN, ys[1], Inches(0.05), notice_h, C_ORANGE)
+    add_textbox(slide, int(MARGIN) + int(Inches(0.25)), ys[1],
+                int(content_w) - int(Inches(0.50)), notice_h,
+                "PPAモデルでは設備費用のお客様負担はございません。"
+                "本資料は設備の概算価額と電力料金の参考情報です。",
+                font_name=FONT_BODY, font_size_pt=SIZE_BODY,
+                font_color=C_NAVY, bold=True, anchor=MSO_ANCHOR.MIDDLE)
+
+    # ---- Section 1: facility value KPI cards ----
+    add_section_header(slide, MARGIN, ys[2], content_w,
+                       "設備概算価額（ご参考）")
+    kpi_y = int(ys[2]) + int(Inches(0.36))
+    price_num, price_unit = (_yen_parts(selling_price)
+                             if selling_price > 0 else ("—", ""))
+    kpis = [
+        (fmt_num(capacity, 1) if capacity > 0 else "—", "kW", "システム容量"),
+        (price_num, price_unit, "設備概算価額"),
+        (f"{kw_price:,}" if kw_price else "—", "円/kW", "kW単価（参考）"),
+    ]
+    for i, (number, unit, label) in enumerate(kpis):
+        add_kpi_card(slide, grid_x(i * 4), kpi_y, grid_w(4), kpi_h,
+                     number, unit, label)
+
+    # ---- Section 2: PPA fee metric band ----
+    add_section_header(slide, MARGIN, ys[3], content_w,
+                       "PPA電力料金お見積り")
+    fee_y = int(ys[3]) + int(Inches(0.36))
+    fee_items = [
+        (f"PPA電力単価（{tax_display}）",
+         f"{ppa_price:.2f}" if ppa_price > 0 else "—", "円/kWh",
+         f"{years}年間一律単価（契約期間中変動なし）"),
+        ("月額電力料金（概算）",
+         f"{monthly_ppa:,}" if monthly_ppa > 0 else "—", "円/月",
+         "税別・初年度概算"),
+    ]
+    for i, (label, number, unit, caption) in enumerate(fee_items):
+        bx = grid_x(i * 6)
+        bw = grid_w(6) - Inches(0.20)
+        add_textbox(slide, bx, fee_y, bw, Inches(0.18),
+                    label,
+                    font_size_pt=SIZE_CAPTION, font_color=C_SUB, bold=True)
+        add_number_unit(slide, bx, fee_y + int(Inches(0.20)),
+                        bw, Inches(0.42),
+                        number, unit)
+        add_textbox(slide, bx, fee_y + int(Inches(0.66)),
+                    bw, Inches(0.16),
+                    caption,
+                    font_size_pt=SIZE_SMALL, font_color=C_SUB)
+        if i > 0:
+            sep_x = bx - Inches(0.12)
+            add_line(slide, sep_x, fee_y + int(Inches(0.04)),
+                     sep_x, fee_y + int(fee_h) - int(Inches(0.10)),
+                     C_HAIR, width_pt=0.5)
+
+    # ---- Section 3: contract-period cost comparison table ----
+    add_section_header(slide, MARGIN, ys[4], content_w,
+                       f"{years}年間コスト比較")
+    tbl_y = int(ys[4]) + int(Inches(0.36))
+
+    yr1_ppa = self_kwh * ppa_price if (self_kwh > 0 and ppa_price > 0) else 0
     rows = [
         ["", "現在の電力料金", "PPA導入後", "削減効果"],
         ["年間電力料金（初年度）",
-         f"\\{int(annual_cost):,}" if annual_cost > 0 else "-",
-         f"\\{int(self_kwh * ppa_price):,}" if (self_kwh > 0 and ppa_price > 0) else "-",
-         f"\\{int(annual_saving):,}" if annual_saving > 0 else "-"],
+         _tbl_yen(annual_cost), _tbl_yen(yr1_ppa), _tbl_yen(annual_saving)],
+        ["初期費用", "—", "0円（無料）", "—"],
         [f"{years}年間累計",
-         f"\\{int(total_grid_cost):,}" if total_grid_cost > 0 else "-",
-         f"\\{int(total_ppa_cost):,}" if total_ppa_cost > 0 else "-",
-         f"\\{int(total_saving):,}" if total_saving > 0 else "-"],
-        ["初期費用", "-", "\\0（無料）", "-"],
+         _tbl_yen(total_grid_cost), _tbl_yen(total_ppa_cost),
+         _tbl_yen(total_saving)],
     ]
+    col_widths = [Inches(2.9), Inches(2.6), Inches(2.6),
+                  int(content_w) - int(Inches(8.1))]
+    add_table(slide, MARGIN, tbl_y, content_w, rows, col_widths,
+              highlight_col=3, total_row=3)
 
-    n_rows = len(rows)
-    row_h = Inches(0.32)
-    tbl_shape = slide.shapes.add_table(n_rows, n_cols, MARGIN, y, table_w, row_h * n_rows)
-    tbl = tbl_shape.table
-
-    for c, cw in enumerate(col_widths):
-        tbl.columns[c].width = int(cw)
-
-    for r, row_data in enumerate(rows):
-        is_header = (r == 0)
-        is_total_row = (r == 2)  # 20-year total row
-
-        for c, cell_text in enumerate(row_data):
-            cell = tbl.cell(r, c)
-            cell.text = str(cell_text)
-            cell.margin_left = Pt(6)
-            cell.margin_right = Pt(6)
-            cell.margin_top = Pt(3)
-            cell.margin_bottom = Pt(3)
-
-            for para in cell.text_frame.paragraphs:
-                if c == 0:
-                    para.alignment = PP_ALIGN.LEFT
-                else:
-                    para.alignment = PP_ALIGN.RIGHT if not is_header else PP_ALIGN.CENTER
-
-                for run in para.runs:
-                    run.font.name = FONT_BODY
-                    run.font.size = Pt(10) if not is_total_row else Pt(11)
-                    run.font.bold = is_header or is_total_row
-                    if is_header:
-                        run.font.color.rgb = C_WHITE
-                    elif c == 3 and not is_header:
-                        # Savings column in orange
-                        run.font.color.rgb = C_ORANGE
-                        run.font.bold = True
-                    else:
-                        run.font.color.rgb = C_DARK
-
-            # Background
-            if is_header:
-                _set_cell_bg(cell, C_NAVY)
-            elif is_total_row:
-                _set_cell_bg(cell, RGBColor(0xFF, 0xF0, 0xE0))
-            elif r % 2 == 0:
-                _set_cell_bg(cell, C_WHITE)
-            else:
-                _set_cell_bg(cell, RGBColor(0xFA, 0xFA, 0xFA))
-
-    y += row_h * n_rows + Inches(0.15)
-
-    # ---- Notes ----
-    notes = [
-        "本資料はPPA電力供給契約の参考資料であり、正式な見積書ではありません。",
-        "設備概算価額はお客様の負担額ではなく、PPA事業者が負担する設備費用の参考値です。",
-        f"電力料金は{tax_display}表記。発電量は年率0.5%低減で試算。",
-        "電力料金単価はPPA契約期間を通じて変動しません。",
+    # ---- Notes (8pt floor) ----
+    note_lines = [
+        ("※ 本資料はPPA電力供給契約の参考資料であり、正式な見積書ではありません。",
+         FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
+        ("※ 設備概算価額はお客様の負担額ではなく、PPA事業者が負担する設備費用の参考値です。",
+         FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
+        (f"※ 電力料金は{tax_display}表記。発電量は年率0.5%低減で試算。"
+         "電力料金単価はPPA契約期間を通じて変動しません。",
+         FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
     ]
-
-    for note in notes:
-        add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.17),
-                    f"※ {note}",
-                    font_name=FONT_BODY, font_size_pt=7, font_color=C_SUB)
-        y += Inches(0.16)
+    add_multiline_textbox(slide, MARGIN, ys[5], content_w, notes_h,
+                          note_lines, line_spacing=1.35)
 
     add_footer(slide)

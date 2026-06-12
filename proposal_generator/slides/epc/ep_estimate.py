@@ -1,8 +1,10 @@
 """
-ep_estimate.py - EPC estimate / quotation slide
+ep_estimate.py - EPC estimate / quotation slide (design v2: Institutional Trust Grid)
 
 Professional Japanese estimate form for EPC (purchase) proposals.
-Shows a clean quotation table with line items, subtotal, tax, and total.
+Quiet white header (no eyebrow), customer block with navy hairline,
+audited-figures table (add_table, 9pt, total row), C_PANEL total band
+with orange left bar, notes and issuer signature.
 
 Only included when estimate data is provided (estimate_items in customer_data).
 """
@@ -12,23 +14,23 @@ import re
 from datetime import date
 from pathlib import Path
 
-from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches, Pt
+from pptx.util import Inches
 
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_GRAY, C_LIGHT_ORANGE, C_ORANGE, C_SUB,
-    C_WHITE, C_NAVY, C_BORDER,
-    FONT_BLACK, FONT_BODY, HEADER_H, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_line, _set_cell_bg,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_PANEL, C_ORANGE, C_SUB,
+    FONT_BLACK, FONT_BODY, GAP_IN_CARD, MARGIN, SIZE_CAPTION, SIZE_SMALL,
+    SIZE_TABLE, SLIDE_W, TABLE_ROW_H,
+    add_footer, add_header_bar, add_line, add_multiline_textbox,
+    add_number_unit, add_rect, add_section_header, add_table, add_textbox,
+    vstack,
 )
 
 TITLE = "概算費用お見積書"
 
-# Slightly lighter navy for table header
-C_TABLE_HEADER = RGBColor(0x00, 0x30, 0x70)
-C_TOTAL_BG = RGBColor(0xFF, 0xF0, 0xE0)  # warm highlight for total row
+TAX_RATE = 0.10
+MIN_ITEM_ROWS = 6    # pad with empty rows for a professional look
+MAX_ITEM_ROWS = 8    # rows beyond this are merged into a single "その他" line
 
 
 def _fmt_date(val) -> str:
@@ -40,16 +42,6 @@ def _fmt_date(val) -> str:
     if m:
         return f"{m.group(1)}年{int(m.group(2))}月{int(m.group(3))}日"
     return s
-
-
-def _fmt_yen_comma(val) -> str:
-    """Format number with comma separators and yen symbol."""
-    if val is None or val == 0:
-        return "-"
-    try:
-        return f"\\{int(val):,}"
-    except (TypeError, ValueError):
-        return str(val)
 
 
 def _fmt_comma(val) -> str:
@@ -158,67 +150,48 @@ def _build_estimate_items(data: dict) -> list[dict]:
     return auto_items
 
 
+def _cap_items(items: list[dict]) -> list[dict]:
+    """Merge overflow rows into a single 'その他' line so the audited
+    table keeps its exact height math inside the content area."""
+    if len(items) <= MAX_ITEM_ROWS:
+        return items
+    head = items[:MAX_ITEM_ROWS - 1]
+    rest = items[MAX_ITEM_ROWS - 1:]
+    rest_amount = sum((it.get("amount") or 0) for it in rest)
+    head.append({
+        "name": "その他",
+        "spec": f"{len(rest)}項目一式",
+        "qty": 1,
+        "unit": "式",
+        "unit_price": None,
+        "amount": rest_amount if rest_amount > 0 else None,
+    })
+    return head
+
+
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     """Render EP_ESTIMATE (EPC quotation page) onto a blank slide."""
     add_header_bar(slide, TITLE, logo_path)
+
+    content_w = SLIDE_W - MARGIN * 2
 
     company = data.get("company_name", "") or ""
     office = data.get("office_name", "") or ""
     proposal_date = _fmt_date(data.get("proposal_date"))
     tax_display = data.get("tax_display", "税抜")
+    opp_id = data.get("opp_id", "")  # reserved for estimate numbering
 
-    # Generate estimate number from date + opp_id
-    opp_id = data.get("opp_id", "")
+    # Estimate number from date (fallback: today)
     est_number = data.get("estimate_number", "")
     if not est_number:
         date_part = str(data.get("proposal_date", "")).replace("-", "")[:8]
+        if not date_part:
+            date_part = date.today().strftime("%Y%m%d")
         est_number = f"EST-{date_part}-001"
 
-    y = CONTENT_TOP
+    # ---- Estimate items & totals ----
+    items = _cap_items(_build_estimate_items(data))
 
-    # ---- Header info: left = customer, right = date/number ----
-    # Left: customer name
-    customer_label = f"{company}"
-    if office:
-        customer_label += f"  {office}"
-    customer_label += "  御中"
-
-    add_textbox(slide, MARGIN, y, Inches(5.5), Inches(0.35),
-                customer_label,
-                font_name=FONT_BLACK, font_size_pt=16,
-                font_color=C_DARK, bold=True)
-
-    # Underline under customer name
-    add_line(slide, MARGIN, y + Inches(0.38),
-             MARGIN + Inches(5.5), y + Inches(0.38),
-             C_DARK, width_pt=1.5)
-
-    # Right: date and estimate number
-    right_x = SLIDE_W - MARGIN - Inches(3.5)
-    add_textbox(slide, right_x, y, Inches(3.5), Inches(0.22),
-                f"見積日: {proposal_date}",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_DARK, align=PP_ALIGN.RIGHT)
-    add_textbox(slide, right_x, y + Inches(0.22), Inches(3.5), Inches(0.22),
-                f"見積番号: {est_number}",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_DARK, align=PP_ALIGN.RIGHT)
-
-    y += Inches(0.55)
-
-    # ---- Subject line ----
-    capacity = data.get("system_capacity_kw", 0) or 0
-    subject = f"太陽光発電設備工事  {capacity:.1f}kW" if capacity else "太陽光発電設備工事"
-    add_textbox(slide, MARGIN, y, SLIDE_W - MARGIN * 2, Inches(0.26),
-                f"件名: {subject}",
-                font_name=FONT_BODY, font_size_pt=11,
-                font_color=C_DARK, bold=True)
-    y += Inches(0.32)
-
-    # ---- Estimate table ----
-    items = _build_estimate_items(data)
-
-    # Calculate subtotal from items that have amounts
     subtotal = 0
     for item in items:
         amt = item.get("amount")
@@ -230,27 +203,13 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     if subtotal == 0 and selling_price > 0:
         subtotal = selling_price
 
-    tax_rate = 0.10
-    tax_amount = int(subtotal * tax_rate)
+    tax_amount = int(subtotal * TAX_RATE)
     grand_total = subtotal + tax_amount
 
-    # Build table rows
-    table_w = SLIDE_W - MARGIN * 2
-    n_cols = 6  # No., Item, Spec, Qty, Unit Price, Amount
-    col_widths = [
-        Inches(0.45),   # No.
-        Inches(2.2),    # Item name
-        Inches(3.8),    # Spec/details
-        Inches(0.9),    # Qty
-        Inches(1.8),    # Unit price
-        Inches(1.85),   # Amount
-    ]
-
-    # Header row
-    rows_data = [["No.", "項目", "仕様・詳細", "数量", "単価（円）", f"金額（円）"]]
-
+    # ---- Table rows (header + items + padding + 3 summary rows) ----
+    rows_data = [["No.", "項目", "仕様・詳細", "数量", "単価（円）", "金額（円）"]]
     for i, item in enumerate(items, 1):
-        qty_str = f"{item['qty']}{item.get('unit', '')}" if item.get('qty') else ""
+        qty_str = f"{item['qty']}{item.get('unit', '')}" if item.get("qty") else ""
         rows_data.append([
             str(i),
             item.get("name", ""),
@@ -259,134 +218,134 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
             _fmt_comma(item.get("unit_price")),
             _fmt_comma(item.get("amount")),
         ])
-
-    # Add empty rows if too few items (minimum 6 for professional look)
-    while len(rows_data) < 7:
+    while len(rows_data) < 1 + MIN_ITEM_ROWS:
         rows_data.append(["", "", "", "", "", ""])
 
-    # Summary rows
     rows_data.append(["", "", "", "", "小計", _fmt_comma(subtotal)])
     rows_data.append(["", "", "", "", "消費税（10%）", _fmt_comma(tax_amount)])
     rows_data.append(["", "", "", "", "合計（税込）", _fmt_comma(grand_total)])
-
-    # Render table manually for better control
-    row_h = Inches(0.28)
     n_rows = len(rows_data)
-    tbl_shape = slide.shapes.add_table(n_rows, n_cols, MARGIN, y, table_w, row_h * n_rows)
-    tbl = tbl_shape.table
 
-    # Set column widths
-    for c, cw in enumerate(col_widths):
-        tbl.columns[c].width = int(cw)
+    col_widths = [
+        Inches(0.45),   # No.
+        Inches(2.10),   # Item name
+        Inches(3.55),   # Spec/details
+        Inches(0.85),   # Qty
+        Inches(1.70),   # Unit price
+    ]
+    col_widths.append(int(content_w) - sum(int(cw) for cw in col_widths))
 
-    # Right-align columns for numbers (qty, unit_price, amount)
-    right_align_cols = {3, 4, 5}
+    # ---- Block heights for vertical justify ----
+    cust_h = Inches(0.52)
+    subj_h = Inches(0.26)
+    table_h = int(TABLE_ROW_H) * n_rows
+    band_h = Inches(0.55)
+    notes_h = Inches(0.88)
+    issuer_h = Inches(0.40)
 
-    for r, row in enumerate(rows_data):
-        is_header = (r == 0)
-        is_summary = (r >= n_rows - 3)
-        is_total = (r == n_rows - 1)
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
+                [cust_h, subj_h, table_h, band_h, notes_h, issuer_h],
+                min_gap=GAP_IN_CARD)
 
-        for c, cell_text in enumerate(row):
-            cell = tbl.cell(r, c)
-            cell.text = str(cell_text) if cell_text is not None else ""
+    # ---- Customer block: name + navy hairline, date/number right ----
+    customer_label = f"{company}"
+    if office:
+        customer_label += f"  {office}"
+    customer_label += "  御中"
 
-            # Margins
-            cell.margin_left = Pt(4)
-            cell.margin_right = Pt(4)
-            cell.margin_top = Pt(2)
-            cell.margin_bottom = Pt(2)
+    add_textbox(slide, MARGIN, ys[0], Inches(5.8), Inches(0.32),
+                customer_label,
+                font_name=FONT_BLACK, font_size_pt=14,
+                font_color=C_DARK, bold=True)
+    add_line(slide, MARGIN, int(ys[0]) + int(Inches(0.42)),
+             int(MARGIN) + int(Inches(5.8)), int(ys[0]) + int(Inches(0.42)),
+             C_NAVY, width_pt=0.75)
 
-            for para in cell.text_frame.paragraphs:
-                if is_header:
-                    para.alignment = PP_ALIGN.CENTER
-                elif c in right_align_cols:
-                    para.alignment = PP_ALIGN.RIGHT
-                elif c == 0:
-                    para.alignment = PP_ALIGN.CENTER
-                else:
-                    para.alignment = PP_ALIGN.LEFT
+    add_multiline_textbox(
+        slide, SLIDE_W - MARGIN - Inches(3.2), ys[0],
+        Inches(3.2), Inches(0.44),
+        [
+            (f"見積日：{proposal_date}", FONT_BODY, SIZE_CAPTION, C_SUB,
+             False, PP_ALIGN.RIGHT),
+            (f"見積番号：{est_number}", FONT_BODY, SIZE_CAPTION, C_SUB,
+             False, PP_ALIGN.RIGHT),
+        ],
+        line_spacing=1.35)
 
-                for run in para.runs:
-                    run.font.name = FONT_BODY
-                    run.font.size = Pt(9) if not is_header else Pt(9)
-                    run.font.bold = is_header or is_total
-                    if is_header:
-                        run.font.color.rgb = C_WHITE
-                    elif is_total:
-                        run.font.color.rgb = C_NAVY
-                        run.font.size = Pt(11)
-                    else:
-                        run.font.color.rgb = C_DARK
+    # ---- Subject line ----
+    capacity = data.get("system_capacity_kw", 0) or 0
+    subject = f"太陽光発電設備工事  {capacity:.1f}kW" if capacity else "太陽光発電設備工事"
+    add_textbox(slide, MARGIN, ys[1], content_w, subj_h,
+                f"件名：{subject}",
+                font_name=FONT_BODY, font_size_pt=11,
+                font_color=C_DARK, bold=True)
 
-            # Cell background
-            if is_header:
-                _set_cell_bg(cell, C_TABLE_HEADER)
-            elif is_total:
-                _set_cell_bg(cell, C_TOTAL_BG)
-            elif is_summary:
-                _set_cell_bg(cell, C_LIGHT_GRAY)
-            elif r % 2 == 0:
-                _set_cell_bg(cell, C_WHITE)
-            else:
-                _set_cell_bg(cell, RGBColor(0xFA, 0xFA, 0xFA))
+    # ---- Estimate table (audited style, exact height = n_rows * ROW_H) ----
+    tbl = add_table(slide, MARGIN, ys[2], content_w, rows_data, col_widths,
+                    font_size_pt=SIZE_TABLE, total_row=n_rows - 1)
 
-    y += row_h * n_rows + Inches(0.18)
+    # Post-pass: item/spec columns read left; summary labels hug the figure
+    for r in range(1, n_rows):
+        for c in (1, 2):
+            for para in tbl.cell(r, c).text_frame.paragraphs:
+                para.alignment = PP_ALIGN.LEFT
+        if r >= n_rows - 3:
+            for para in tbl.cell(r, 4).text_frame.paragraphs:
+                para.alignment = PP_ALIGN.RIGHT
 
-    # ---- Grand total highlight box ----
-    total_box_w = Inches(4.5)
-    total_box_h = Inches(0.55)
-    total_box_x = SLIDE_W - MARGIN - total_box_w
-    add_rounded_rect(slide, total_box_x, y, total_box_w, total_box_h, C_NAVY)
-    add_textbox(slide, total_box_x + Inches(0.2), y + Inches(0.05),
-                Inches(1.8), total_box_h - Inches(0.1),
-                f"お見積り合計（税込）",
-                font_name=FONT_BODY, font_size_pt=12,
-                font_color=C_WHITE, bold=True)
-    add_textbox(slide, total_box_x + Inches(2.0), y + Inches(0.03),
-                Inches(2.3), total_box_h - Inches(0.06),
-                _fmt_yen_comma(grand_total),
-                font_name=FONT_BLACK, font_size_pt=20,
-                font_color=C_WHITE, bold=True, align=PP_ALIGN.RIGHT)
+    # ---- Total band: C_PANEL + orange left bar + 20pt number/unit ----
+    band_w = Inches(4.8)
+    band_x = SLIDE_W - MARGIN - band_w
+    band_y = ys[3]
+    add_rect(slide, band_x, band_y, band_w, band_h, C_PANEL)
+    add_rect(slide, band_x, band_y, Inches(0.05), band_h, C_ORANGE)
+    add_textbox(slide, int(band_x) + int(Inches(0.18)),
+                int(band_y) + int(Inches(0.17)),
+                Inches(1.9), Inches(0.22),
+                "お見積り合計（税込）",
+                font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                font_color=C_SUB, bold=True)
+    add_number_unit(slide, int(band_x) + int(Inches(2.0)),
+                    int(band_y) + int(Inches(0.08)),
+                    int(band_w) - int(Inches(2.2)),
+                    int(band_h) - int(Inches(0.16)),
+                    _fmt_comma(grand_total) if grand_total > 0 else "—", "円",
+                    number_size_pt=20, align=PP_ALIGN.RIGHT)
 
-    y += total_box_h + Inches(0.20)
-
-    # ---- Notes section ----
+    # ---- Notes (備考・条件) ----
     validity = data.get("estimate_validity", "本見積書発行日より1ヶ月間")
     delivery = data.get("estimate_delivery", "ご発注後、別途ご相談")
     subsidy_note = data.get("estimate_subsidy_note", "補助金申請費用は別途お見積り")
 
-    notes = [
-        f"見積有効期限: {validity}",
-        f"納期目安: {delivery}",
-        f"備考: {subsidy_note}",
-        f"金額表記: {tax_display}（消費税は税込合計に含む）",
+    notes_y = ys[4]
+    add_section_header(slide, MARGIN, notes_y, Inches(4.0), "備考・条件",
+                       font_size_pt=11)
+    note_lines = [
+        (f"見積有効期限：{validity}", FONT_BODY, SIZE_SMALL, C_SUB,
+         False, PP_ALIGN.LEFT),
+        (f"納期目安：{delivery}", FONT_BODY, SIZE_SMALL, C_SUB,
+         False, PP_ALIGN.LEFT),
+        (f"備考：{subsidy_note}", FONT_BODY, SIZE_SMALL, C_SUB,
+         False, PP_ALIGN.LEFT),
+        (f"金額表記：{tax_display}（消費税は税込合計に含む）", FONT_BODY,
+         SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
     ]
+    add_multiline_textbox(slide, int(MARGIN) + int(Inches(0.20)),
+                          int(notes_y) + int(Inches(0.26)),
+                          int(content_w) - int(Inches(0.20)),
+                          int(notes_h) - int(Inches(0.26)),
+                          note_lines, line_spacing=1.35)
 
-    add_textbox(slide, MARGIN, y, Inches(1.0), Inches(0.22),
-                "備考・条件",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_ORANGE, bold=True)
-    y += Inches(0.22)
-
-    for note in notes:
-        add_textbox(slide, MARGIN + Inches(0.1), y,
-                    SLIDE_W - MARGIN * 2 - Inches(0.1), Inches(0.18),
-                    f"  {note}",
-                    font_name=FONT_BODY, font_size_pt=8, font_color=C_SUB)
-        y += Inches(0.17)
-
-    # ---- Issuer info (right-aligned) ----
-    issuer_y = SLIDE_H - Inches(0.85)
-    add_textbox(slide, SLIDE_W - MARGIN - Inches(3.5), issuer_y,
-                Inches(3.5), Inches(0.20),
-                "株式会社オルテナジー",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_DARK, bold=True, align=PP_ALIGN.RIGHT)
-    add_textbox(slide, SLIDE_W - MARGIN - Inches(3.5), issuer_y + Inches(0.18),
-                Inches(3.5), Inches(0.18),
-                "https://altenergy.co.jp/",
-                font_name=FONT_BODY, font_size_pt=8,
-                font_color=C_SUB, align=PP_ALIGN.RIGHT)
+    # ---- Issuer signature (right-aligned) ----
+    add_multiline_textbox(
+        slide, SLIDE_W - MARGIN - Inches(3.5), ys[5],
+        Inches(3.5), issuer_h,
+        [
+            ("株式会社オルテナジー", FONT_BODY, SIZE_CAPTION, C_DARK,
+             True, PP_ALIGN.RIGHT),
+            ("https://altenergy.co.jp/", FONT_BODY, SIZE_SMALL, C_SUB,
+             False, PP_ALIGN.RIGHT),
+        ],
+        line_spacing=1.35)
 
     add_footer(slide)

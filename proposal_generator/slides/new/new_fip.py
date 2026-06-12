@@ -1,15 +1,15 @@
 """
-new_fip.py - FIP制度の活用スライド
+new_fip.py - FIP制度の活用スライド (design v2: Institutional Trust Grid)
 
-Explains the Feed-in Premium (FIP) scheme and shows projected revenue
-from surplus electricity sold under FIP.
-
-Layout: A4 landscape
-- Header bar
-- What is FIP section (explanation)
-- KPI cards: FIPプレミアム単価, 想定売電量, 年間FIP収入
-- Comparison bar: 自家消費メリット vs FIP売電収入
-- Notes: FIP認定要件, バランシングコスト
+Layout (A4 landscape):
+  - Section: what FIP is (body lead, no manual line wrapping)
+  - Metric band: 3 KPI cards 28pt (premium / surplus volume / net revenue)
+    + calc detail strip (gross − balancing cost = net) when computable
+  - Benefit row: self-consumption KPI + FIP revenue KPI + total panel band
+    (C_PANEL + orange left bar + 28pt number, pp9-style)
+  - Notes: FIP certification, balancing cost, market price assumption
+All fip_* bindings are preserved; gross / balancing now surface in the
+calc strip instead of staying invisible.
 """
 from __future__ import annotations
 
@@ -19,196 +19,147 @@ from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches
 
 from proposal_generator.utils import (
-    CONTENT_TOP,
-    C_DARK,
-    C_LIGHT_GRAY,
-    C_LIGHT_ORANGE,
-    C_ORANGE,
-    C_SUB,
-    C_TEAL,
-    C_WHITE,
-    FONT_BLACK,
-    FONT_BODY,
-    MARGIN,
-    SLIDE_H,
+    CONTENT_BOTTOM, CONTENT_TOP, C_ORANGE, C_PANEL, C_SUB,
+    FONT_BODY, GAP_CARD, MARGIN, SIZE_BODY, SIZE_CAPTION, SIZE_SMALL,
     SLIDE_W,
-    add_footer,
-    add_header_bar,
-    add_rect,
-    add_rounded_rect,
-    add_section_header,
-    add_textbox,
-    fmt_num,
-    fmt_yen,
+    add_footer, add_header_bar, add_kpi_card, add_multiline_textbox,
+    add_number_unit, add_rect, add_section_header, add_textbox,
+    fmt_num, fmt_yen, grid_w, grid_x, vstack,
 )
 
 TITLE = "FIP制度の活用"
+EYEBROW = "03｜効果シミュレーション"
+
+_EXPLANATION = (
+    "FIP制度は、再エネ電気を市場で売電する際に、市場価格に一定のプレミアム"
+    "（補助額）を上乗せして収入を得られる制度です。2022年4月にFIT制度の後継"
+    "として開始されました。自家消費で賄いきれない余剰電力をFIPで売電する"
+    "ことで、収益を最大化できます。"
+)
+
+
+def _f(data: dict, key: str, default: float = 0.0) -> float:
+    """Read a numeric value from data, tolerating None / bad types."""
+    try:
+        v = data.get(key, default)
+        return float(v) if v is not None else float(default)
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
     """Render the FIP slide onto a blank slide."""
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
+    content_w = SLIDE_W - MARGIN * 2
 
-    y = CONTENT_TOP + Inches(0.05)
-
-    # ------------------------------------------------------------------
-    # Section 1: What is FIP
-    # ------------------------------------------------------------------
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "FIP（フィードインプレミアム）制度とは", font_size_pt=13)
-    y += Inches(0.35)
-
-    # Explanation box
-    explanation_lines = [
-        "FIP制度は、再エネ電気を市場で売電する際に、市場価格に一定のプレミアム（補助額）を",
-        "上乗せして収入を得られる制度です。2022年4月に開始され、FIT制度の後継として位置づけ",
-        "られています。自家消費で賄いきれない余剰電力をFIPで売電することで、収益を最大化できます。",
-    ]
-    explanation_text = "\n".join(explanation_lines)
-
-    add_rounded_rect(slide, MARGIN, y,
-                     SLIDE_W - MARGIN * 2, Inches(0.88),
-                     C_LIGHT_GRAY)
-    add_textbox(slide, MARGIN + Inches(0.15), y + Inches(0.08),
-                SLIDE_W - MARGIN * 2 - Inches(0.3), Inches(0.78),
-                explanation_text,
-                font_name=FONT_BODY, font_size_pt=10.5,
-                font_color=C_DARK)
-    y += Inches(1.0)
-
-    # ------------------------------------------------------------------
-    # Section 2: Key metrics (3 KPI cards)
-    # ------------------------------------------------------------------
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "FIP売電試算", font_size_pt=13)
-    y += Inches(0.35)
-
-    # Extract data
-    fip_premium = data.get("fip_premium_yen_per_kwh", 0)
-    market_price = data.get("fip_market_price", 12.0)
-    surplus_kwh = data.get("surplus_kwh", 0)
-    fip_gross = data.get("fip_gross_revenue", 0)
-    fip_balancing = data.get("fip_balancing_cost", 0)
-    fip_net = data.get("fip_net_revenue", 0)
+    # ---- Data (all original bindings preserved) ----
+    fip_premium = _f(data, "fip_premium_yen_per_kwh", 0)
+    market_price = _f(data, "fip_market_price", 12.0)
+    surplus_kwh = _f(data, "surplus_kwh", 0)
+    fip_gross = _f(data, "fip_gross_revenue", 0)
+    fip_balancing = _f(data, "fip_balancing_cost", 0)
+    fip_net = _f(data, "fip_net_revenue", 0)
+    balancing_rate = _f(data, "fip_balancing_rate", 1.0)
 
     # If we have the inputs but not calculated values, compute them
     if surplus_kwh > 0 and fip_premium > 0 and fip_gross == 0:
         fip_gross = surplus_kwh * (market_price + fip_premium)
-        fip_balancing = surplus_kwh * 1.0  # default balancing rate
+        fip_balancing = surplus_kwh * balancing_rate
         fip_net = fip_gross - fip_balancing
 
-    card_w = (SLIDE_W - MARGIN * 2 - Inches(0.18) * 2) / 3
-    card_h = Inches(1.15)
-    kpi_data = [
-        (fmt_num(fip_premium, 1), "円/kWh", "FIPプレミアム単価"),
-        (f"{surplus_kwh:,.0f}" if surplus_kwh else "—", "kWh/年", "想定売電量（余剰分）"),
-        (fmt_yen(fip_net, ""), "円/年", "年間FIP収入（税引前）"),
+    self_saving = _f(data, "annual_cost_saving", 0)
+    total_benefit = self_saving + fip_net
+    has_detail = fip_gross > 0
+
+    # ---- Block heights for vertical justify ----
+    explain_h = int(Inches(0.36)) + int(Inches(0.56))
+    kpi_block_h = (int(Inches(0.36)) + int(Inches(1.00))
+                   + (int(Inches(0.30)) if has_detail else 0))
+    benefit_block_h = int(Inches(0.36)) + int(Inches(1.05))
+    notes_block_h = int(Inches(0.32)) + int(Inches(0.60))
+
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
+                [explain_h, kpi_block_h, benefit_block_h, notes_block_h],
+                min_gap=GAP_CARD)
+
+    # ---- Section 1: What is FIP ----
+    add_section_header(slide, MARGIN, ys[0], content_w,
+                       "FIP（フィードインプレミアム）制度とは")
+    add_textbox(slide, MARGIN, int(ys[0]) + int(Inches(0.36)),
+                content_w, Inches(0.56),
+                _EXPLANATION,
+                font_size_pt=SIZE_BODY, line_spacing=1.35)
+
+    # ---- Section 2: FIP KPI band (28pt cards) ----
+    add_section_header(slide, MARGIN, ys[1], content_w, "FIP売電試算")
+    card_y = int(ys[1]) + int(Inches(0.36))
+    card_h = Inches(1.00)
+    kpi_items = [
+        (fmt_num(fip_premium, 1) if fip_premium else "—",
+         "円/kWh", "FIPプレミアム単価"),
+        (f"{surplus_kwh:,.0f}" if surplus_kwh else "—",
+         "kWh/年", "想定売電量（余剰分）"),
+        (fmt_yen(fip_net, "") if fip_net else "—",
+         "円/年", "年間FIP収入（税引前）"),
     ]
+    for i, (number, unit, label) in enumerate(kpi_items):
+        add_kpi_card(slide, grid_x(i * 4), card_y, grid_w(4), card_h,
+                     number, unit, label)
 
-    for i, (number, unit, label) in enumerate(kpi_data):
-        cx = MARGIN + i * (card_w + Inches(0.18))
-        cy = y
+    if has_detail:
+        add_textbox(slide, MARGIN,
+                    card_y + int(card_h) + int(Inches(0.08)),
+                    content_w, Inches(0.20),
+                    f"内訳：売電収入 {fmt_yen(fip_gross)}"
+                    f"（市場価格 {market_price:.1f}円 ＋ プレミアム "
+                    f"{fmt_num(fip_premium, 1)}円/kWh） − バランシングコスト "
+                    f"{fmt_yen(fip_balancing)} ＝ {fmt_yen(fip_net)}/年",
+                    font_size_pt=SIZE_SMALL, font_color=C_SUB)
 
-        add_rounded_rect(slide, cx, cy, card_w, card_h, C_LIGHT_ORANGE)
-        add_rect(slide, cx, cy, card_w, Inches(0.06), C_ORANGE)
-        add_textbox(slide, cx, cy + Inches(0.1), card_w, Inches(0.42),
-                    number,
-                    font_name=FONT_BLACK, font_size_pt=26,
-                    font_color=C_ORANGE, bold=True,
-                    align=PP_ALIGN.CENTER)
-        add_textbox(slide, cx, cy + Inches(0.52), card_w, Inches(0.2),
-                    unit,
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_SUB, align=PP_ALIGN.CENTER)
-        add_textbox(slide, cx + Inches(0.08), cy + card_h - Inches(0.28),
-                    card_w - Inches(0.16), Inches(0.24),
-                    label,
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_DARK, bold=True, align=PP_ALIGN.CENTER)
-
-    y += card_h + Inches(0.15)
-
-    # ------------------------------------------------------------------
-    # Section 3: Self-consumption vs FIP comparison
-    # ------------------------------------------------------------------
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "自家消費メリット vs FIP売電収入", font_size_pt=13)
-    y += Inches(0.35)
-
-    self_consumption_saving = data.get("annual_cost_saving", 0) or 0
-    total_benefit = self_consumption_saving + (fip_net or 0)
-
-    bar_w = SLIDE_W - MARGIN * 2
-    bar_h = Inches(0.75)
-
-    # Two-column comparison
-    half_w = (bar_w - Inches(0.15)) / 2
-
-    # Left: self-consumption
-    add_rounded_rect(slide, MARGIN, y, half_w, bar_h, C_LIGHT_ORANGE)
-    add_textbox(slide, MARGIN + Inches(0.1), y + Inches(0.06),
-                half_w - Inches(0.2), Inches(0.2),
-                "自家消費メリット",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_DARK, bold=True)
-    add_textbox(slide, MARGIN + Inches(0.1), y + Inches(0.3),
-                half_w - Inches(0.2), Inches(0.35),
-                fmt_yen(self_consumption_saving) + "/年",
-                font_name=FONT_BLACK, font_size_pt=20,
-                font_color=C_ORANGE, bold=True)
-
-    # Right: FIP revenue
-    right_x = MARGIN + half_w + Inches(0.15)
-    add_rounded_rect(slide, right_x, y, half_w, bar_h, C_LIGHT_GRAY)
-    add_rect(slide, right_x, y, half_w, Inches(0.05), C_TEAL)
-    add_textbox(slide, right_x + Inches(0.1), y + Inches(0.06),
-                half_w - Inches(0.2), Inches(0.2),
-                "FIP売電収入（余剰分）",
-                font_name=FONT_BODY, font_size_pt=10,
-                font_color=C_DARK, bold=True)
-    add_textbox(slide, right_x + Inches(0.1), y + Inches(0.3),
-                half_w - Inches(0.2), Inches(0.35),
-                fmt_yen(fip_net) + "/年",
-                font_name=FONT_BLACK, font_size_pt=20,
-                font_color=C_TEAL, bold=True)
-
-    y += bar_h + Inches(0.1)
-
-    # Total benefit
-    add_rounded_rect(slide, MARGIN, y, bar_w, Inches(0.45), C_ORANGE)
-    add_textbox(slide, MARGIN + Inches(0.15), y + Inches(0.05),
-                Inches(3.5), Inches(0.35),
+    # ---- Section 3: self-consumption + FIP = total benefit ----
+    add_section_header(slide, MARGIN, ys[2], content_w,
+                       "年間メリットの合計（自家消費＋FIP売電）")
+    row_y = int(ys[2]) + int(Inches(0.36))
+    row_h = Inches(1.05)
+    add_kpi_card(slide, grid_x(0), row_y, grid_w(4), row_h,
+                 fmt_yen(self_saving, "") if self_saving else "—", "円/年",
+                 "自家消費メリット（電気代削減）")
+    add_kpi_card(slide, grid_x(4), row_y, grid_w(4), row_h,
+                 fmt_yen(fip_net, "") if fip_net else "—", "円/年",
+                 "FIP売電収入（余剰分）")
+    # Total band: C_PANEL + orange left bar + 28pt number (pp9 style)
+    band_x = grid_x(8)
+    band_w = grid_w(4)
+    add_rect(slide, band_x, row_y, band_w, row_h, C_PANEL)
+    add_rect(slide, band_x, row_y, Inches(0.05), row_h, C_ORANGE)
+    add_textbox(slide, int(band_x) + int(Inches(0.18)),
+                row_y + int(Inches(0.12)),
+                int(band_w) - int(Inches(0.36)), Inches(0.20),
                 "合計年間メリット",
-                font_name=FONT_BODY, font_size_pt=12,
-                font_color=C_WHITE, bold=True)
-    add_textbox(slide, MARGIN + Inches(4.0), y + Inches(0.02),
-                bar_w - Inches(4.5), Inches(0.4),
-                fmt_yen(total_benefit) + "/年",
-                font_name=FONT_BLACK, font_size_pt=22,
-                font_color=C_WHITE, bold=True,
-                align=PP_ALIGN.RIGHT)
-    y += Inches(0.6)
+                font_name=FONT_BODY, font_size_pt=SIZE_CAPTION,
+                font_color=C_SUB, bold=True)
+    add_number_unit(slide, int(band_x) + int(Inches(0.18)),
+                    row_y + int(Inches(0.30)),
+                    int(band_w) - int(Inches(0.36)),
+                    int(row_h) - int(Inches(0.44)),
+                    fmt_yen(total_benefit, "") if total_benefit else "—",
+                    "円/年")
 
-    # ------------------------------------------------------------------
-    # Section 4: Notes
-    # ------------------------------------------------------------------
-    add_section_header(slide, MARGIN, y, SLIDE_W - MARGIN * 2,
-                       "留意事項", font_size_pt=11)
-    y += Inches(0.3)
-
-    notes = [
-        "・FIP認定の取得が必要です（経済産業省への申請手続き）",
-        "・バランシングコスト（発電予測と実績の差分ペナルティ）が発生します"
-        f"（本試算では {data.get('fip_balancing_rate', 1.0):.1f} 円/kWh で概算）",
-        "・市場価格は変動するため、実際の収入は上記試算と異なる場合があります"
-        f"（本試算の想定市場価格: {market_price:.1f} 円/kWh）",
+    # ---- Section 4: Notes ----
+    add_section_header(slide, MARGIN, ys[3], content_w, "留意事項",
+                       font_size_pt=11)
+    note_lines = [
+        ("・FIP認定の取得が必要です（経済産業省への申請手続き）",
+         FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
+        ("・バランシングコスト（発電予測と実績の差分ペナルティ）が発生します"
+         f"（本試算では {balancing_rate:.1f} 円/kWh で概算）",
+         FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
+        ("・市場価格は変動するため、実際の収入は上記試算と異なる場合があります"
+         f"（本試算の想定市場価格：{market_price:.1f} 円/kWh）",
+         FONT_BODY, SIZE_SMALL, C_SUB, False, PP_ALIGN.LEFT),
     ]
-    for note in notes:
-        add_textbox(slide, MARGIN + Inches(0.1), y,
-                    SLIDE_W - MARGIN * 2 - Inches(0.2), Inches(0.22),
-                    note,
-                    font_name=FONT_BODY, font_size_pt=8.5,
-                    font_color=C_SUB)
-        y += Inches(0.2)
+    add_multiline_textbox(slide, MARGIN, int(ys[3]) + int(Inches(0.32)),
+                          content_w, Inches(0.60),
+                          note_lines, line_spacing=1.5)
 
     add_footer(slide)

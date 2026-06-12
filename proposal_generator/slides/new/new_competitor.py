@@ -1,133 +1,138 @@
 """
-new_competitor.py - 他社比較表スライド
+new_competitor.py - 他社比較表スライド (design v2: Institutional Trust Grid)
 
-Comparison table: アルトエナジー vs 他社A vs 他社B
-Rows: PPA単価, サービス内容, メンテナンス, 契約柔軟性, 実績
-Highlights アルトエナジー column with orange accent.
+Audited comparison table (オルテナジー vs 他社A/他社B):
+  - v2 add_table with highlight_col on the オルテナジー column
+    (C_TINT body + orange header emphasis), white header + navy rule, 9pt
+  - Three strength cards (flat line icons) restating the differentiators
+  - Source note bottom-right
+Rows come from data["competitors"] (list of lists) or the
+proposal-type-specific defaults; all rows are always rendered.
 """
 from __future__ import annotations
+
 from pathlib import Path
+
 from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches, Pt
+from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    C_LIGHT_GRAY, C_BORDER,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_table, _set_cell_bg,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_ORANGE, C_SUB,
+    GAP_CARD, MARGIN, SIZE_BODY, SIZE_CAPTION, SIZE_SMALL, SIZE_TABLE,
+    SLIDE_W, TABLE_ROW_H,
+    add_card_with_accent, add_footer, add_header_bar, add_icon,
+    add_section_header, add_table, add_textbox, grid_w, grid_x, vstack,
 )
 
 TITLE = "他社比較"
+EYEBROW = "02｜比較検討"
+
+_OURS = "オルテナジー（当社）"
 
 # Default comparison data (used when data.get("competitors") is not available)
 _DEFAULT_ROWS_PPA = [
-    ["比較項目",       "アルトエナジー",                  "他社A",                    "他社B"],
-    ["PPA単価",        "業界最安水準",                    "標準的",                   "やや高め"],
-    ["サービス内容",   "設計〜施工〜運用まで一貫対応",     "設計・施工のみ",           "施工・運用"],
-    ["メンテナンス",   "24時間遠隔監視＋定期点検込み",     "オプション（別途費用）",    "年1回点検のみ"],
-    ["契約柔軟性",     "契約期間・条件をカスタマイズ可能", "固定プランのみ",           "一部カスタマイズ可"],
-    ["実績",           "全国500件以上の導入実績",          "関東中心100件程度",        "50件程度"],
+    ["比較項目",     _OURS,                              "他社A",                  "他社B"],
+    ["PPA単価",      "業界最安水準",                     "標準的",                 "やや高め"],
+    ["サービス内容", "設計〜施工〜運用まで一貫対応",     "設計・施工のみ",         "施工・運用"],
+    ["メンテナンス", "24時間遠隔監視＋定期点検込み",     "オプション（別途費用）", "年1回点検のみ"],
+    ["契約柔軟性",   "契約期間・条件をカスタマイズ可能", "固定プランのみ",         "一部カスタマイズ可"],
+    ["実績",         "全国500件以上の導入実績",          "関東中心100件程度",      "50件程度"],
 ]
 _DEFAULT_ROWS_EPC = [
-    ["比較項目",       "アルトエナジー",                  "他社A",                    "他社B"],
-    ["kW単価",         "業界最安水準",                    "標準的",                   "やや高め"],
-    ["サービス内容",   "設計〜施工〜運用まで一貫対応",     "設計・施工のみ",           "施工・運用"],
-    ["メンテナンス",   "24時間遠隔監視＋定期点検込み",     "オプション（別途費用）",    "年1回点検のみ"],
-    ["保証内容",       "パネル25年・PCS10年・施工10年",    "パネル25年・PCS5年",       "パネル25年のみ"],
-    ["実績",           "全国500件以上の導入実績",          "関東中心100件程度",        "50件程度"],
+    ["比較項目",     _OURS,                              "他社A",                  "他社B"],
+    ["kW単価",       "業界最安水準",                     "標準的",                 "やや高め"],
+    ["サービス内容", "設計〜施工〜運用まで一貫対応",     "設計・施工のみ",         "施工・運用"],
+    ["メンテナンス", "24時間遠隔監視＋定期点検込み",     "オプション（別途費用）", "年1回点検のみ"],
+    ["保証内容",     "パネル25年・PCS10年・施工10年",    "パネル25年・PCS5年",     "パネル25年のみ"],
+    ["実績",         "全国500件以上の導入実績",          "関東中心100件程度",      "50件程度"],
 ]
+
+# Strength cards: (icon, title, description) — restate the オルテナジー column
+_STRENGTHS = [
+    ("panel", "設計〜運用まで一貫対応",  "ワンストップ体制でトータルコストを最適化"),
+    ("check", "メンテナンス込み",        "24時間遠隔監視と定期点検を標準で提供"),
+    ("doc",   "全国500件以上の導入実績", "業種・規模を問わない豊富な導入ノウハウ"),
+]
+
+
+def _resolve_rows(data: dict) -> list[list]:
+    """Return comparison rows: custom data if well-formed, else defaults."""
+    competitors = data.get("competitors")
+    if (isinstance(competitors, list) and competitors
+            and all(isinstance(r, (list, tuple)) and len(r) >= 2
+                    for r in competitors)
+            and len({len(r) for r in competitors}) == 1):
+        return [list(r) for r in competitors]
+    return (_DEFAULT_ROWS_EPC if data.get("proposal_type") == "epc"
+            else _DEFAULT_ROWS_PPA)
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
+    content_w = SLIDE_W - MARGIN * 2
 
-    y = CONTENT_TOP + Inches(0.05)
-
-    # Subtitle
-    add_textbox(slide, MARGIN, y,
-                SLIDE_W - MARGIN * 2, Inches(0.28),
-                "主要項目での他社比較",
-                font_name=FONT_BODY, font_size_pt=12,
-                font_color=C_SUB)
-    y += Inches(0.35)
-
-    # Build rows from data or defaults
-    competitors = data.get("competitors")
-    if competitors and isinstance(competitors, list) and len(competitors) > 0:
-        rows = competitors  # expect list of lists
-    else:
-        rows = _DEFAULT_ROWS_EPC if data.get("proposal_type") == "epc" else _DEFAULT_ROWS_PPA
-
+    rows = _resolve_rows(data)
+    n_rows = len(rows)
     n_cols = len(rows[0])
-    col_w = (SLIDE_W - MARGIN * 2) / n_cols
-    col_widths = [int(col_w)] * n_cols
 
-    # Draw table manually for better styling control
-    row_h = Inches(0.55)
-    table_x = MARGIN
-    table_w = SLIDE_W - MARGIN * 2
+    # ---- Block heights for vertical justify ----
+    lead_h = Inches(0.26)
+    table_block_h = int(Inches(0.36)) + int(TABLE_ROW_H) * n_rows
+    cards_block_h = int(Inches(0.36)) + int(Inches(1.00))
+    note_h = Inches(0.20)
 
-    for r, row in enumerate(rows):
-        for c, cell_text in enumerate(row):
-            cx = table_x + col_w * c
-            cy = y + row_h * r
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
+                [lead_h, table_block_h, cards_block_h, note_h],
+                min_gap=GAP_CARD)
 
-            # Determine background color
-            if r == 0:
-                # Header row
-                bg = C_ORANGE
-                font_color = C_WHITE
-                bold = True
-                font_size = 11
-            elif c == 1:
-                # アルトエナジー column - orange accent
-                bg = C_LIGHT_ORANGE
-                font_color = C_DARK
-                bold = False
-                font_size = 10
-            elif r % 2 == 0:
-                bg = C_WHITE
-                font_color = C_DARK
-                bold = False
-                font_size = 10
-            else:
-                bg = C_LIGHT_GRAY
-                font_color = C_DARK
-                bold = False
-                font_size = 10
+    # ---- Lead ----
+    add_textbox(slide, MARGIN, ys[0], content_w, lead_h,
+                "PPA単価・サービス・実績など、主要項目で他社と比較しました。",
+                font_size_pt=SIZE_BODY, font_color=C_SUB)
 
-            # First column (labels) is bold
-            if c == 0 and r > 0:
-                bold = True
+    # ---- Audited comparison table ----
+    add_section_header(slide, MARGIN, ys[1], content_w, "主要項目での他社比較")
+    label_w = int(Inches(1.7))
+    rest_w = (int(content_w) - label_w) // (n_cols - 1)
+    col_widths = [label_w] + [rest_w] * (n_cols - 1)
 
-            add_rounded_rect(slide, cx + Inches(0.02), cy + Inches(0.02),
-                             col_w - Inches(0.04), row_h - Inches(0.04),
-                             bg, radius_pt=3.0,
-                             border_color=C_BORDER, border_pt=0.5)
+    table_y = int(ys[1]) + int(Inches(0.36))
+    tbl = add_table(slide, MARGIN, table_y, content_w, rows, col_widths,
+                    font_size_pt=SIZE_TABLE, highlight_col=1)
+    # Orange emphasis on the オルテナジー header cell
+    try:
+        for para in tbl.cell(0, 1).text_frame.paragraphs:
+            for run in para.runs:
+                run.font.color.rgb = C_ORANGE
+    except Exception:
+        pass
 
-            add_textbox(slide, cx + Inches(0.08), cy + Inches(0.08),
-                        col_w - Inches(0.16), row_h - Inches(0.16),
-                        str(cell_text),
-                        font_name=FONT_BODY if not (r == 0) else FONT_BLACK,
-                        font_size_pt=font_size,
-                        font_color=font_color,
-                        bold=bold,
-                        align=PP_ALIGN.CENTER,
-                        word_wrap=True)
+    # ---- Strength cards ----
+    cards_y = int(ys[2])
+    add_section_header(slide, MARGIN, cards_y, content_w,
+                       "オルテナジーが選ばれる理由")
+    card_y = cards_y + int(Inches(0.36))
+    card_h = Inches(1.00)
+    icon_s = Inches(0.40)
+    for i, (icon, title, desc) in enumerate(_STRENGTHS):
+        cx, cy, cw, ch = add_card_with_accent(
+            slide, grid_x(i * 4), card_y, grid_w(4), card_h,
+            accent_position="left")
+        add_icon(slide, icon, cx,
+                 int(cy) + (int(ch) - int(icon_s)) // 2, size=icon_s)
+        tx = int(cx) + int(icon_s) + int(Inches(0.14))
+        tw = int(cw) - int(icon_s) - int(Inches(0.14))
+        add_textbox(slide, tx, int(cy) + int(Inches(0.06)), tw, Inches(0.22),
+                    title, font_size_pt=SIZE_BODY, font_color=C_DARK,
+                    bold=True)
+        add_textbox(slide, tx, int(cy) + int(Inches(0.32)), tw, Inches(0.40),
+                    desc, font_size_pt=SIZE_CAPTION, font_color=C_SUB,
+                    line_spacing=1.35)
 
-    # Orange accent bar on アルトエナジー column
-    accent_x = table_x + col_w
-    accent_y = y + row_h  # skip header
-    accent_h = row_h * (len(rows) - 1)
-    add_rect(slide, accent_x + Inches(0.02), accent_y, Inches(0.05), accent_h, C_ORANGE)
-
-    # Bottom note
-    note_y = y + row_h * len(rows) + Inches(0.15)
-    add_textbox(slide, MARGIN, note_y,
-                SLIDE_W - MARGIN * 2, Inches(0.24),
+    # ---- Source note ----
+    add_textbox(slide, MARGIN, ys[3], content_w, note_h,
                 "※ 他社情報は一般的な市場調査に基づく参考値です",
-                font_name=FONT_BODY, font_size_pt=9,
-                font_color=C_SUB,
+                font_size_pt=SIZE_SMALL, font_color=C_SUB,
                 align=PP_ALIGN.RIGHT)
 
     add_footer(slide)

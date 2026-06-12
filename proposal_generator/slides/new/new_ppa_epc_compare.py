@@ -1,144 +1,125 @@
 """
-new_ppa_epc_compare.py - PPA vs EPC 比較スライド
+new_ppa_epc_compare.py - PPA vs EPC 比較スライド (design v2)
 
-Side-by-side comparison table:
-- PPA: 初期費用ゼロ, 電力購入契約, メンテ込み, 契約期間中は解約不可
-- EPC: 初期投資必要, 設備所有, 自社メンテ, 資産計上・償却可能
-Orange for PPA column, blue/gray for EPC column.
-Recommendation based on data.get("proposal_type").
+Audited comparison table (比較項目 | PPA | EPC):
+  - row labels left-aligned, descriptions centered, 9pt
+  - highlight_col tints the recommended side; 'おすすめ' pill above it
+  - 適している企業 row promoted to two cards under the table
+  - Navy recommendation band driven by data["proposal_type"]
 """
 from __future__ import annotations
+
 from pathlib import Path
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
+
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches
+
 from proposal_generator.utils import (
-    CONTENT_TOP, C_DARK, C_LIGHT_ORANGE, C_ORANGE, C_SUB, C_WHITE,
-    C_LIGHT_GRAY, C_BORDER,
-    FONT_BLACK, FONT_BODY, MARGIN, SLIDE_H, SLIDE_W,
-    add_footer, add_header_bar, add_rect, add_rounded_rect, add_textbox,
-    add_section_header,
+    CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_NAVY_LIGHT, C_ORANGE,
+    C_SUB, C_WHITE, FONT_BLACK, GAP_CARD, MARGIN, SIZE_BODY, SIZE_CAPTION,
+    SIZE_H2, SIZE_LEAD, SIZE_TABLE, SLIDE_W, TABLE_ROW_H,
+    add_card_with_accent, add_footer, add_header_bar, add_pill_label,
+    add_rect, add_section_header, add_table, add_textbox, vstack,
 )
 
 TITLE = "PPA vs EPC 比較"
-
-# Blue/gray accent for EPC column
-C_BLUE = RGBColor(0x4A, 0x6F, 0xA5)
-C_LIGHT_BLUE = RGBColor(0xEB, 0xF0, 0xF7)
+EYEBROW = "02｜比較検討"
 
 COMPARISON_ITEMS = [
-    ("初期費用",     "ゼロ（PPA事業者が負担）",          "設備購入費用が必要"),
+    ("初期費用",     "ゼロ（PPA事業者が負担）",           "設備購入費用が必要"),
     ("設備所有権",   "PPA事業者が所有",                   "自社所有（資産計上）"),
     ("電力料金",     "PPA単価で固定（長期安定）",         "自家発電のため実質無料"),
     ("メンテナンス", "PPA事業者が全て対応（込み）",       "自社で手配（別途コスト）"),
     ("契約期間",     "15〜20年（期間中は原則解約不可）",  "制約なし（自社設備）"),
     ("税務メリット", "経費処理が可能",                    "減価償却・税額控除が可能"),
     ("リスク",       "発電リスクはPPA事業者側",           "故障・性能低下リスクは自社"),
-    ("適している企業", "初期投資を抑えたい企業",           "自己資金・融資で投資可能な企業"),
 ]
+
+# 適している企業 (former table row, shown as cards)
+SUITABLE_PPA = "初期投資を抑えたい企業"
+SUITABLE_EPC = "自己資金・融資で投資可能な企業"
+
+HEADER_PPA = "PPA（電力購入契約）"
+HEADER_EPC = "EPC（自社購入）"
 
 
 def generate(slide, data: dict, logo_path: Path = None) -> None:
-    add_header_bar(slide, TITLE, logo_path)
+    add_header_bar(slide, TITLE, logo_path, eyebrow=EYEBROW)
+    content_w = SLIDE_W - MARGIN * 2
 
-    y = CONTENT_TOP + Inches(0.05)
-
-    # Subtitle
-    add_textbox(slide, MARGIN, y,
-                SLIDE_W - MARGIN * 2, Inches(0.28),
-                "導入方式の違いを分かりやすく比較",
-                font_name=FONT_BODY, font_size_pt=12,
-                font_color=C_SUB)
-    y += Inches(0.35)
-
-    # Column layout: label | PPA | EPC
-    label_w = Inches(2.2)
-    col_w = (SLIDE_W - MARGIN * 2 - label_w - Inches(0.15)) / 2
-    gap = Inches(0.08)
-
-    ppa_x = MARGIN + label_w + gap
-    epc_x = ppa_x + col_w + gap
-
-    row_h = Inches(0.5)
-
-    # Column headers
-    # PPA header
-    add_rounded_rect(slide, ppa_x, y, col_w, Inches(0.42), C_ORANGE, radius_pt=4.0)
-    add_textbox(slide, ppa_x, y + Inches(0.06),
-                col_w, Inches(0.3),
-                "PPA（電力購入契約）",
-                font_name=FONT_BLACK, font_size_pt=13,
-                font_color=C_WHITE, bold=True,
-                align=PP_ALIGN.CENTER)
-
-    # EPC header
-    add_rounded_rect(slide, epc_x, y, col_w, Inches(0.42), C_BLUE, radius_pt=4.0)
-    add_textbox(slide, epc_x, y + Inches(0.06),
-                col_w, Inches(0.3),
-                "EPC（自社購入）",
-                font_name=FONT_BLACK, font_size_pt=13,
-                font_color=C_WHITE, bold=True,
-                align=PP_ALIGN.CENTER)
-
-    y += Inches(0.5)
-
-    # Comparison rows
-    for r, (label, ppa_text, epc_text) in enumerate(COMPARISON_ITEMS):
-        ry = y + r * row_h
-        row_bg = C_LIGHT_GRAY if r % 2 == 0 else C_WHITE
-
-        # Label cell
-        add_rounded_rect(slide, MARGIN, ry + Inches(0.02),
-                         label_w, row_h - Inches(0.04), row_bg,
-                         radius_pt=3.0)
-        add_rect(slide, MARGIN, ry + Inches(0.02),
-                 Inches(0.05), row_h - Inches(0.04), C_ORANGE)
-        add_textbox(slide, MARGIN + Inches(0.12), ry + Inches(0.06),
-                    label_w - Inches(0.16), row_h - Inches(0.12),
-                    label,
-                    font_name=FONT_BODY, font_size_pt=10,
-                    font_color=C_DARK, bold=True)
-
-        # PPA cell
-        add_rounded_rect(slide, ppa_x, ry + Inches(0.02),
-                         col_w, row_h - Inches(0.04), C_LIGHT_ORANGE,
-                         radius_pt=3.0)
-        add_textbox(slide, ppa_x + Inches(0.08), ry + Inches(0.06),
-                    col_w - Inches(0.16), row_h - Inches(0.12),
-                    ppa_text,
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_DARK,
-                    word_wrap=True)
-
-        # EPC cell
-        add_rounded_rect(slide, epc_x, ry + Inches(0.02),
-                         col_w, row_h - Inches(0.04), C_LIGHT_BLUE,
-                         radius_pt=3.0)
-        add_textbox(slide, epc_x + Inches(0.08), ry + Inches(0.06),
-                    col_w - Inches(0.16), row_h - Inches(0.12),
-                    epc_text,
-                    font_name=FONT_BODY, font_size_pt=9,
-                    font_color=C_DARK,
-                    word_wrap=True)
-
-    # Recommendation banner
     proposal_type = data.get("proposal_type", "PPA")
-    if proposal_type and "epc" in str(proposal_type).lower():
-        rec_text = "御社にはEPC（自社購入）モデルをおすすめします"
-        rec_bg = C_BLUE
-    else:
-        rec_text = "御社にはPPA（電力購入契約）モデルをおすすめします"
-        rec_bg = C_ORANGE
+    is_epc = bool(proposal_type) and "epc" in str(proposal_type).lower()
 
-    rec_y = y + len(COMPARISON_ITEMS) * row_h + Inches(0.12)
-    rec_h = Inches(0.45)
-    add_rounded_rect(slide, MARGIN, rec_y,
-                     SLIDE_W - MARGIN * 2, rec_h, rec_bg, radius_pt=6.0)
-    add_textbox(slide, MARGIN, rec_y + Inches(0.08),
-                SLIDE_W - MARGIN * 2, Inches(0.28),
-                f"▶  {rec_text}",
-                font_name=FONT_BLACK, font_size_pt=14,
-                font_color=C_WHITE, bold=True,
-                align=PP_ALIGN.CENTER)
+    rows = [["比較項目", HEADER_PPA, HEADER_EPC]]
+    rows += [[label, ppa, epc] for label, ppa, epc in COMPARISON_ITEMS]
+    n_rows = len(rows)
+
+    # ---- Block heights for vertical justify ----
+    lead_h = Inches(0.26)
+    pill_h = Inches(0.26)
+    table_block_h = (int(pill_h) + int(Inches(0.08))
+                     + int(TABLE_ROW_H) * n_rows)
+    suit_block_h = int(Inches(0.36)) + int(Inches(0.95))
+    band_h = Inches(0.52)
+
+    ys = vstack(CONTENT_TOP, CONTENT_BOTTOM,
+                [lead_h, table_block_h, suit_block_h, band_h],
+                min_gap=GAP_CARD)
+
+    # ---- Lead ----
+    add_textbox(slide, MARGIN, ys[0], content_w, lead_h,
+                "導入方式の違いを分かりやすく比較",
+                font_size_pt=SIZE_BODY, font_color=C_SUB)
+
+    # ---- Comparison table with highlight on the recommended column ----
+    label_w = int(Inches(1.7))
+    col_w = (int(content_w) - label_w) // 2
+    col_widths = [label_w, col_w, col_w]
+    highlight_col = 2 if is_epc else 1
+
+    # 'おすすめ' pill centered above the recommended column
+    pill_w = int(Inches(1.05))
+    rec_col_x = int(MARGIN) + label_w + col_w * (highlight_col - 1)
+    add_pill_label(slide, rec_col_x + (col_w - pill_w) // 2, ys[1],
+                   pill_w, pill_h, "おすすめ")
+
+    table_y = int(ys[1]) + int(pill_h) + int(Inches(0.08))
+    add_table(slide, MARGIN, table_y, content_w, rows, col_widths,
+              font_size_pt=SIZE_TABLE, highlight_col=highlight_col)
+
+    # ---- 適している企業 cards ----
+    suit_y = int(ys[2])
+    add_section_header(slide, MARGIN, suit_y, content_w, "適している企業")
+    card_y = suit_y + int(Inches(0.36))
+    card_h = Inches(0.95)
+    card_w = (int(content_w) - int(GAP_CARD)) // 2
+    cards = [
+        (HEADER_PPA, SUITABLE_PPA, not is_epc),
+        (HEADER_EPC, SUITABLE_EPC, is_epc),
+    ]
+    for i, (tag, text, recommended) in enumerate(cards):
+        x = int(MARGIN) + i * (card_w + int(GAP_CARD))
+        cx, cy, cw, ch = add_card_with_accent(
+            slide, x, card_y, card_w, card_h,
+            accent_color=C_ORANGE if recommended else C_NAVY_LIGHT,
+            accent_position="top")
+        add_textbox(slide, cx, int(cy) + int(Inches(0.04)), cw, Inches(0.20),
+                    tag, font_size_pt=SIZE_CAPTION,
+                    font_color=C_ORANGE if recommended else C_SUB, bold=True)
+        add_textbox(slide, cx, int(cy) + int(Inches(0.30)), cw, Inches(0.34),
+                    text, font_size_pt=SIZE_LEAD, font_color=C_DARK,
+                    bold=True)
+
+    # ---- Recommendation band (navy CTA + orange tick) ----
+    band_y = ys[3]
+    add_rect(slide, MARGIN, band_y, content_w, band_h, C_NAVY)
+    add_rect(slide, MARGIN, band_y, Inches(0.06), band_h, C_ORANGE)
+    model = HEADER_EPC if is_epc else HEADER_PPA
+    add_textbox(slide, int(MARGIN) + int(Inches(0.20)), band_y,
+                int(content_w) - int(Inches(0.40)), band_h,
+                f"御社には {model} モデルをおすすめします",
+                font_name=FONT_BLACK, font_size_pt=SIZE_H2,
+                font_color=C_WHITE, bold=True, align=PP_ALIGN.CENTER,
+                anchor=MSO_ANCHOR.MIDDLE)
 
     add_footer(slide)
