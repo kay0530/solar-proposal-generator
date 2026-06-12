@@ -17,7 +17,8 @@ from proposal_generator.utils import (
     CONTENT_BOTTOM, CONTENT_TOP, C_DARK, C_NAVY, C_ORANGE, C_PANEL,
     FONT_BLACK, FONT_BODY, GAP_IN_CARD, MARGIN, SLIDE_W,
     LINE_SPACING_BODY, LINE_SPACING_LEAD, SIZE_BODY, SIZE_CAPTION, SIZE_LEAD,
-    add_card_with_accent, add_footer, add_header_bar, add_rect, add_textbox,
+    add_card_with_accent, add_footer, add_header_bar, add_icon, add_rect,
+    add_textbox,
     grid_x, grid_w, vstack,
 )
 
@@ -34,13 +35,13 @@ STANDFIRST = (
 )
 
 CARDS = [
-    ("01", "電気代削減",
+    ("01", "yen", "電気代削減",
      "再エネ電気を長期固定単価で利用でき、市場価格の変動に左右されない"
      "安定した電力調達と停電リスクの軽減が可能になります。"),
-    ("02", "初期費用ゼロ",
+    ("02", "zero_yen", "初期費用ゼロ",
      "太陽光パネルなど全設備の設置費用・維持管理費用はPPA事業者が負担。"
      "お客様の初期投資は不要です。"),
-    ("03", "CO₂削減・脱炭素経営",
+    ("03", "leaf", "CO₂削減・脱炭素経営",
      "再エネの自家消費でCO₂排出量を削減。取引先からのScope2排出削減要請や"
      "CDP・SBT等の開示要求にも、実需ベースの再エネ調達で応えられます。"),
 ]
@@ -65,7 +66,7 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                 anchor=MSO_ANCHOR.TOP)
 
     # --- Band 2: 3 benefit cards ---
-    for i, (num, card_title, body) in enumerate(CARDS):
+    for i, (num, icon_name, card_title, body) in enumerate(CARDS):
         x = grid_x(i * 4)
         w = grid_w(4)
         cx, cy, cw, ch = add_card_with_accent(slide, x, ys[1], w, band2_h)
@@ -75,6 +76,9 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                     num,
                     font_name=FONT_BLACK, font_size_pt=SIZE_CAPTION,
                     font_color=C_ORANGE, bold=True, tracking_pt=1.2)
+        # flat line icon, top-right of the card
+        add_icon(slide, icon_name,
+                 cx + cw - Inches(0.46), ey_y, Inches(0.40))
 
         title_y = ey_y + Inches(0.20) + GAP_IN_CARD
         add_textbox(slide, cx, title_y, cw, Inches(0.28),

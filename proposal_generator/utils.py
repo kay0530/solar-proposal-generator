@@ -968,3 +968,144 @@ def fmt_num(value, decimals: int = 1, suffix: str = "") -> str:
         return f"{float(value):,.{decimals}f}{suffix}"
     except (TypeError, ValueError):
         return str(value)
+
+# ---------------------------------------------------------------------------
+# Flat line-icon library (v2) — navy strokes + orange accents, pure shapes
+# ---------------------------------------------------------------------------
+
+def _icon_oval_outline(slide, x, y, d, color, width_pt=1.5):
+    return add_oval(slide, x, y, d, d, fill_color=None,
+                    border_color=color, border_pt=width_pt)
+
+
+def add_icon(slide, name: str, x, y, size=Inches(0.40),
+             color: RGBColor = C_NAVY, accent: RGBColor = C_ORANGE):
+    """Draw a flat line icon at (x, y) within a size x size box.
+
+    Names: 'yen' (coin), 'zero_yen', 'leaf', 'check', 'sun', 'panel',
+           'factory', 'doc'. Unknown names draw nothing (safe no-op).
+    Icons follow the v2 language: 1.5pt navy outlines, orange accents.
+    """
+    import math
+    from pptx.enum.shapes import MSO_SHAPE
+    x, y, s = int(x), int(y), int(size)
+
+    if name in ("yen", "zero_yen"):
+        _icon_oval_outline(slide, x, y, s, color)
+        label = "\u00a50" if name == "zero_yen" else "\u00a5"
+        fs = 12 if name == "zero_yen" else 14
+        tb = slide.shapes.add_textbox(x, y, s, s)
+        tf = tb.text_frame
+        tf.word_wrap = False
+        tf.margin_left = Pt(0); tf.margin_right = Pt(0)
+        tf.margin_top = Pt(0); tf.margin_bottom = Pt(0)
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        r = p.add_run(); r.text = label
+        r.font.name = FONT_BLACK; r.font.size = Pt(fs)
+        r.font.bold = True; r.font.color.rgb = accent
+
+    elif name == "leaf":
+        d = int(s * 0.78)
+        leaf = slide.shapes.add_shape(MSO_SHAPE.TEAR, x + (s - d) // 2,
+                                      y + (s - d) // 2, d, d)
+        leaf.fill.background()
+        leaf.line.color.rgb = color
+        leaf.line.width = Pt(1.5)
+        leaf.rotation = 135.0
+        leaf.shadow.inherit = False
+        # midrib
+        add_line(slide, x + int(s * 0.32), y + int(s * 0.68),
+                 x + int(s * 0.62), y + int(s * 0.38), accent, width_pt=1.25)
+
+    elif name == "check":
+        _icon_oval_outline(slide, x, y, s, color)
+        add_line(slide, x + int(s * 0.28), y + int(s * 0.52),
+                 x + int(s * 0.44), y + int(s * 0.68), accent, width_pt=2.0)
+        add_line(slide, x + int(s * 0.44), y + int(s * 0.68),
+                 x + int(s * 0.74), y + int(s * 0.32), accent, width_pt=2.0)
+
+    elif name == "sun":
+        core = int(s * 0.42)
+        cx0 = x + s // 2
+        cy0 = y + s // 2
+        add_oval(slide, cx0 - core // 2, cy0 - core // 2, core, core,
+                 fill_color=None, border_color=accent, border_pt=1.5)
+        r1 = int(s * 0.30)
+        r2 = int(s * 0.48)
+        for k in range(8):
+            ang = math.radians(k * 45)
+            add_line(slide,
+                     cx0 + int(r1 * math.cos(ang)), cy0 + int(r1 * math.sin(ang)),
+                     cx0 + int(r2 * math.cos(ang)), cy0 + int(r2 * math.sin(ang)),
+                     color, width_pt=1.25)
+
+    elif name == "panel":
+        pw = int(s * 0.92)
+        ph = int(s * 0.62)
+        px = x + (s - pw) // 2
+        py = y + (s - ph) // 2
+        rect = slide.shapes.add_shape(1, px, py, pw, ph)
+        rect.fill.background()
+        rect.line.color.rgb = color
+        rect.line.width = Pt(1.5)
+        rect.shadow.inherit = False
+        add_line(slide, px + pw // 3, py, px + pw // 3, py + ph, color, 0.75)
+        add_line(slide, px + 2 * pw // 3, py, px + 2 * pw // 3, py + ph, color, 0.75)
+        add_line(slide, px, py + ph // 2, px + pw, py + ph // 2, color, 0.75)
+        # small accent sun dot top-right
+        dot = int(s * 0.14)
+        add_oval(slide, px + pw - dot // 2, py - dot // 2, dot, dot,
+                 fill_color=accent, border_color=None)
+
+    elif name == "factory":
+        bw = int(s * 0.86)
+        bh = int(s * 0.52)
+        bx = x + (s - bw) // 2
+        by = y + s - bh - int(s * 0.06)
+        rect = slide.shapes.add_shape(1, bx, by, bw, bh)
+        rect.fill.background()
+        rect.line.color.rgb = color
+        rect.line.width = Pt(1.5)
+        rect.shadow.inherit = False
+        from pptx.enum.shapes import MSO_SHAPE as _MS
+        tri_w = bw // 3
+        tri_h = int(s * 0.22)
+        for k in range(2):
+            tri = slide.shapes.add_shape(_MS.ISOSCELES_TRIANGLE,
+                                         bx + k * tri_w + tri_w // 4,
+                                         by - tri_h, tri_w, tri_h)
+            tri.fill.background()
+            tri.line.color.rgb = color
+            tri.line.width = Pt(1.25)
+            tri.shadow.inherit = False
+        # accent door
+        dw = int(bw * 0.18)
+        add_rect(slide, bx + bw - dw - int(s * 0.08), by + bh - int(bh * 0.55),
+                 dw, int(bh * 0.55), accent)
+
+    elif name == "doc":
+        pw = int(s * 0.66)
+        ph = int(s * 0.88)
+        px = x + (s - pw) // 2
+        py = y + (s - ph) // 2
+        rect = slide.shapes.add_shape(1, px, py, pw, ph)
+        rect.fill.background()
+        rect.line.color.rgb = color
+        rect.line.width = Pt(1.5)
+        rect.shadow.inherit = False
+        from pptx.enum.shapes import MSO_SHAPE as _MS
+        fold = int(s * 0.20)
+        tri = slide.shapes.add_shape(_MS.RIGHT_TRIANGLE,
+                                     px + pw - fold, py, fold, fold)
+        tri.fill.solid()
+        tri.fill.fore_color.rgb = accent
+        tri.line.fill.background()
+        tri.rotation = 90.0
+        tri.shadow.inherit = False
+        for k in range(3):
+            ly = py + int(ph * 0.38) + k * int(ph * 0.18)
+            add_line(slide, px + int(pw * 0.18), ly,
+                     px + int(pw * 0.82), ly, color, 0.9)
+

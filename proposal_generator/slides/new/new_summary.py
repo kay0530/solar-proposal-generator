@@ -2,7 +2,7 @@
 new_summary.py - まとめ・サマリースライド (design v2: Institutional Trust Grid)
 
 Three-tier closing, eyebrow '06｜まとめ':
-  1. Three KPI cards (annual saving / CO2 / payback) at 28pt
+  1. Three KPI cards (annual saving / CO2 / zero-upfront or payback) at 28pt
   2. 48pt metric hero: cumulative saving over the contract period (cols 3-8)
   3. Next steps with circle number markers, quiet spec strip,
      and the deck's only dark band: navy CTA with white outline pill
@@ -78,8 +78,13 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                  "年間電気代削減額")
     add_kpi_card(slide, grid_x(4), kpi_y, grid_w(4), kpi_h,
                  _safe_f(co2, ".1f"), "t-CO₂/年", "年間CO₂削減量")
-    add_kpi_card(slide, grid_x(8), kpi_y, grid_w(4), kpi_h,
-                 _safe_f(recovery, ".1f"), "年", "投資回収期間")
+    if is_epc:
+        # Payback only makes sense when the customer invests (EPC)
+        add_kpi_card(slide, grid_x(8), kpi_y, grid_w(4), kpi_h,
+                     _safe_f(recovery, ".1f"), "年", "投資回収期間")
+    else:
+        add_kpi_card(slide, grid_x(8), kpi_y, grid_w(4), kpi_h,
+                     "0", "円", "初期費用（お客様ご負担）")
 
     # ---- Tier 2: cumulative saving hero (48pt, cols 3-8) ----
     total = saving * years if saving and years else None
@@ -132,7 +137,7 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     add_rect(slide, MARGIN, cta_y, content_w, cta_h, C_NAVY)
     add_textbox(slide, int(MARGIN) + int(Inches(0.35)), cta_y,
                 int(content_w) - int(Inches(2.50)), cta_h,
-                "無料詳細シミュレーションを承ります",
+                "まずは現地調査から——日程のご相談を承ります",
                 font_name=FONT_BLACK, font_size_pt=13, font_color=C_WHITE,
                 bold=True, anchor=MSO_ANCHOR.MIDDLE)
     pill_w = Inches(1.45)
@@ -141,7 +146,7 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                    int(MARGIN) + int(content_w) - int(pill_w)
                    - int(Inches(0.35)),
                    int(cta_y) + (int(cta_h) - int(pill_h)) // 2,
-                   pill_w, pill_h, "お見積り無料",
+                   pill_w, pill_h, "現地調査無料",
                    font_color=C_WHITE)
 
     add_footer(slide)
