@@ -126,18 +126,112 @@ with st.sidebar:
         st.rerun()
 
 _SORTABLE_STYLE = (
-    ".sortable-item { text-align: left !important; "
-    "max-width: 55% !important; padding: 5px 12px !important; "
-    "font-size: 0.85rem !important; }"
+    ".sortable-component { border: none !important; padding: 0 !important; }"
+    ".sortable-container { background: transparent !important; "
+    "border: none !important; padding: 0 !important; }"
+    ".sortable-container-header { display: none !important; }"
+    ".sortable-item, .sortable-item:active { "
+    "width: 100% !important; max-width: 100% !important; "
+    "box-sizing: border-box !important; "
+    "background: #FFFFFF !important; color: #333333 !important; "
+    "border: 1px solid #D8D4CC !important; "
+    "border-left: 4px solid #E8490F !important; "
+    "border-radius: 4px !important; "
+    "padding: 9px 14px !important; margin: 0 0 6px 0 !important; "
+    "font-size: 0.9rem !important; font-weight: 600 !important; "
+    "text-align: left !important; cursor: grab !important; "
+    "box-shadow: none !important; }"
+    ".sortable-item:hover { background: #FDEDE6 !important; }"
 )
 
-# Hide anchor link icons on headings and fullscreen buttons on images
+# Design v2 web grammar: white canvas, navy structure, orange numbers/CTA
 st.markdown("""
 <style>
+/* hide heading anchor links + image fullscreen buttons */
 a.headerlink, .stMainBlockContainer [data-testid="StyledFullScreenButton"],
-h1 a, h2 a, h3 a, .stMarkdown a[href^="#"] {
-    display: none !important;
+h1 a, h2 a, h3 a, .stMarkdown a[href^="#"] { display: none !important; }
+
+/* typography: navy headings with tight tracking */
+h1, h2, h3 { color: #1F3551 !important; font-weight: 700 !important; }
+h1 { font-size: 1.55rem !important; letter-spacing: 0.01em; }
+h2 { font-size: 1.2rem !important; }
+h3 { font-size: 1.0rem !important; }
+
+/* title underline: navy rule + orange tick (mirrors the deck header) */
+.stApp h1 {
+    padding-bottom: 0.45rem;
+    border-bottom: 2px solid #1F3551;
+    position: relative;
 }
+.stApp h1::after {
+    content: "";
+    position: absolute;
+    left: 0; bottom: -2px;
+    width: 96px; height: 4px;
+    background: #E8490F;
+}
+
+/* tabs: step-style, orange active indicator */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0.25rem;
+    border-bottom: 1px solid #D8D4CC;
+}
+.stTabs [data-baseweb="tab"] {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #666666;
+    padding: 0.55rem 1.1rem;
+}
+.stTabs [aria-selected="true"] {
+    color: #1F3551 !important;
+}
+
+/* expanders: white cards with hairline borders */
+[data-testid="stExpander"] {
+    border: 1px solid #D8D4CC !important;
+    border-radius: 6px !important;
+    background: #FFFFFF;
+    margin-bottom: 0.35rem;
+}
+[data-testid="stExpander"] summary {
+    font-weight: 600;
+    color: #1F3551;
+}
+[data-testid="stExpander"] summary:hover { color: #E8490F; }
+
+/* metrics: navy labels, orange values (the deck's number language) */
+[data-testid="stMetricLabel"] { color: #666666 !important; font-weight: 600; }
+[data-testid="stMetricValue"] { color: #E8490F !important; font-weight: 700; }
+
+/* primary buttons: orange CTA; secondary: navy outline */
+.stButton button[kind="primary"], .stDownloadButton button[kind="primary"] {
+    background: #E8490F !important; border: none !important;
+    font-weight: 700 !important;
+}
+.stButton button[kind="secondary"], .stDownloadButton button[kind="secondary"] {
+    border: 1px solid #1F3551 !important; color: #1F3551 !important;
+    font-weight: 600 !important;
+}
+.stButton button[kind="secondary"]:hover {
+    border-color: #E8490F !important; color: #E8490F !important;
+}
+
+/* sidebar: warm panel */
+[data-testid="stSidebar"] {
+    background: #F7F5F2;
+    border-right: 1px solid #D8D4CC;
+}
+
+/* dataframes / tables: tighter, hairline */
+[data-testid="stDataFrame"] { border: 1px solid #D8D4CC; border-radius: 6px; }
+
+/* number inputs / selects: subtle borders */
+[data-baseweb="input"], [data-baseweb="select"] > div {
+    border-color: #D8D4CC !important;
+}
+
+/* st.info/success/warning accents stay default; captions slightly faint */
+.stCaption, [data-testid="stCaptionContainer"] { color: #999999 !important; }
 </style>
 """, unsafe_allow_html=True)
 EXCEL_PATH = BASE_DIR.parent / "ＰＬ_補ありなしPPAEPC_260317_XXXX様_v3.3.1.xlsm"
