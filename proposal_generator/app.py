@@ -118,49 +118,85 @@ if not _check_auth():
 # Sidebar: login info / logout
 # ---------------------------------------------------------------------------
 
+if "dark_mode_toggle" not in st.session_state:
+    st.session_state["dark_mode_toggle"] = st.query_params.get("dark") == "1"
+
+
+def _on_theme_change():
+    if st.session_state.get("dark_mode_toggle"):
+        st.query_params["dark"] = "1"
+    else:
+        st.query_params.pop("dark", None)
+
+
 with st.sidebar:
+    st.toggle("🌙 ダークモード", key="dark_mode_toggle",
+              on_change=_on_theme_change)
     st.caption(f"ログイン中: {st.session_state.get('_auth_email', '')}")
     if st.button("ログアウト", key="logout_btn"):
         st.session_state.clear()
         st.query_params.clear()
         st.rerun()
 
-_SORTABLE_STYLE = (
-    ".sortable-component { border: none !important; padding: 0 !important; }"
-    ".sortable-container { background: transparent !important; "
-    "border: none !important; padding: 0 !important; }"
-    ".sortable-container-header { display: none !important; }"
-    ".sortable-item, .sortable-item:active { "
-    "width: 100% !important; max-width: 100% !important; "
-    "box-sizing: border-box !important; "
-    "background: #FFFFFF !important; color: #333333 !important; "
-    "border: 1px solid #D8D4CC !important; "
-    "border-left: 4px solid #E8490F !important; "
-    "border-radius: 4px !important; "
-    "padding: 9px 14px !important; margin: 0 0 6px 0 !important; "
-    "font-size: 0.9rem !important; font-weight: 600 !important; "
-    "text-align: left !important; cursor: grab !important; "
-    "box-shadow: none !important; }"
-    ".sortable-item:hover { background: #FDEDE6 !important; }"
-)
+_DARK = bool(st.session_state.get("dark_mode_toggle"))
 
-# Design v2 web grammar: white canvas, navy structure, orange numbers/CTA
-st.markdown("""
+def _sortable_style(dark: bool) -> str:
+    if dark:
+        bg, text, hair, hover = "#1C2532", "#E6E4E1", "#36404C", "#3A2A22"
+    else:
+        bg, text, hair, hover = "#FFFFFF", "#333333", "#D8D4CC", "#FDEDE6"
+    return (
+        ".sortable-component { border: none !important; padding: 0 !important; }"
+        ".sortable-container { background: transparent !important; "
+        "border: none !important; padding: 0 !important; }"
+        ".sortable-container-header { display: none !important; }"
+        ".sortable-item, .sortable-item:active { "
+        "width: 100% !important; max-width: 100% !important; "
+        "box-sizing: border-box !important; "
+        f"background: {bg} !important; color: {text} !important; "
+        f"border: 1px solid {hair} !important; "
+        "border-left: 4px solid #E8490F !important; "
+        "border-radius: 4px !important; "
+        "padding: 9px 14px !important; margin: 0 0 6px 0 !important; "
+        "font-size: 0.9rem !important; font-weight: 600 !important; "
+        "text-align: left !important; cursor: grab !important; "
+        "box-shadow: none !important; }"
+        f".sortable-item:hover {{ background: {hover} !important; }}"
+    )
+
+
+# Design v2 web grammar: palette-driven (light = deck look / dark = night)
+from string import Template as _CssTemplate
+
+if _DARK:
+    _PAL = dict(BG="#111927", CARD="#1C2532", PANEL="#19222E",
+                TEXT="#E6E4E1", SUB="#A8B0BA", FAINT="#7A828C",
+                HAIR="#36404C", HEAD="#DCE4EF", HOVER="#3A2A22")
+else:
+    _PAL = dict(BG="#FFFFFF", CARD="#FFFFFF", PANEL="#F7F5F2",
+                TEXT="#333333", SUB="#666666", FAINT="#999999",
+                HAIR="#D8D4CC", HEAD="#1F3551", HOVER="#FDEDE6")
+
+st.markdown(_CssTemplate("""
 <style>
 /* hide heading anchor links + image fullscreen buttons */
 a.headerlink, .stMainBlockContainer [data-testid="StyledFullScreenButton"],
 h1 a, h2 a, h3 a, .stMarkdown a[href^="#"] { display: none !important; }
 
-/* typography: navy headings with tight tracking */
-h1, h2, h3 { color: #1F3551 !important; font-weight: 700 !important; }
+/* canvas + base text */
+.stApp { background: $BG !important; }
+.stApp, .stMarkdown, p, label, li, span { color: $TEXT; }
+
+/* typography: structural headings */
+h1, h2, h3 { color: $HEAD !important; font-weight: 700 !important; }
 h1 { font-size: 1.55rem !important; letter-spacing: 0.01em; }
 h2 { font-size: 1.2rem !important; }
 h3 { font-size: 1.0rem !important; }
 
-/* title underline: navy rule + orange tick (mirrors the deck header) */
+/* title underline: rule + orange tick (mirrors the deck header) */
 .stApp h1 {
     padding-bottom: 0.45rem;
-    border-bottom: 2px solid #1F3551;
+    border-bottom: 2px solid $HEAD;
     position: relative;
 }
 .stApp h1::after {
@@ -171,69 +207,109 @@ h3 { font-size: 1.0rem !important; }
     background: #E8490F;
 }
 
-/* tabs: step-style, orange active indicator */
+/* tabs */
 .stTabs [data-baseweb="tab-list"] {
     gap: 0.25rem;
-    border-bottom: 1px solid #D8D4CC;
+    border-bottom: 1px solid $HAIR;
 }
 .stTabs [data-baseweb="tab"] {
     font-weight: 600;
     font-size: 0.95rem;
-    color: #666666;
+    color: $SUB;
     padding: 0.55rem 1.1rem;
 }
-.stTabs [aria-selected="true"] {
-    color: #1F3551 !important;
-}
+.stTabs [aria-selected="true"] { color: $HEAD !important; }
 
-/* expanders: white cards with hairline borders */
+/* expanders: cards with hairline borders */
 [data-testid="stExpander"] {
-    border: 1px solid #D8D4CC !important;
+    border: 1px solid $HAIR !important;
     border-radius: 6px !important;
-    background: #FFFFFF;
+    background: $CARD;
     margin-bottom: 0.35rem;
 }
+[data-testid="stExpander"] details,
 [data-testid="stExpander"] summary {
-    font-weight: 600;
-    color: #1F3551;
+    background: $CARD !important;
+    border-color: $HAIR !important;
 }
-[data-testid="stExpander"] summary:hover { color: #E8490F; }
+[data-testid="stExpander"] summary { font-weight: 600; }
+[data-testid="stExpander"] summary,
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary span,
+[data-testid="stExpander"] summary div { color: $HEAD !important; }
+[data-testid="stExpander"] summary:hover,
+[data-testid="stExpander"] summary:hover p,
+[data-testid="stExpander"] summary:hover span { color: #E8490F !important; }
 
-/* metrics: navy labels, orange values (the deck's number language) */
-[data-testid="stMetricLabel"] { color: #666666 !important; font-weight: 600; }
+/* metrics: the deck's number language */
+[data-testid="stMetricLabel"] { color: $SUB !important; font-weight: 600; }
 [data-testid="stMetricValue"] { color: #E8490F !important; font-weight: 700; }
+[data-testid="stMetricDelta"] { color: $SUB !important; }
 
-/* primary buttons: orange CTA; secondary: navy outline */
+/* buttons */
 .stButton button[kind="primary"], .stDownloadButton button[kind="primary"] {
     background: #E8490F !important; border: none !important;
-    font-weight: 700 !important;
+    color: #FFFFFF !important; font-weight: 700 !important;
 }
 .stButton button[kind="secondary"], .stDownloadButton button[kind="secondary"] {
-    border: 1px solid #1F3551 !important; color: #1F3551 !important;
-    font-weight: 600 !important;
+    border: 1px solid $HEAD !important; color: $HEAD !important;
+    background: transparent !important; font-weight: 600 !important;
 }
 .stButton button[kind="secondary"]:hover {
     border-color: #E8490F !important; color: #E8490F !important;
 }
 
-/* sidebar: warm panel */
+/* sidebar */
 [data-testid="stSidebar"] {
-    background: #F7F5F2;
-    border-right: 1px solid #D8D4CC;
+    background: $PANEL;
+    border-right: 1px solid $HAIR;
+}
+[data-testid="stSidebar"] * { color: $TEXT; }
+
+/* inputs / selects / textareas */
+[data-baseweb="input"], [data-baseweb="base-input"],
+[data-baseweb="select"] > div, [data-baseweb="textarea"] {
+    background: $CARD !important;
+    border-color: $HAIR !important;
+    color: $TEXT !important;
+}
+[data-baseweb="input"] input, [data-baseweb="base-input"] input,
+[data-baseweb="select"] input, [data-baseweb="textarea"] textarea,
+[data-baseweb="select"] [data-baseweb="tag"] span {
+    background: transparent !important;
+    color: $TEXT !important;
+}
+.stTextInput input, .stNumberInput input, .stTextArea textarea {
+    background: $CARD !important;
+    color: $TEXT !important;
+}
+.stTextInput input::placeholder, .stTextArea textarea::placeholder {
+    color: $FAINT !important;
+}
+/* dropdown menus (rendered in portal) */
+[data-baseweb="popover"] [data-baseweb="menu"],
+[data-baseweb="popover"] ul[role="listbox"] {
+    background: $CARD !important;
+}
+[data-baseweb="menu"] li, ul[role="listbox"] li { color: $TEXT !important; }
+
+/* radio / checkbox label text */
+[data-testid="stRadio"] label p, [data-testid="stCheckbox"] label p {
+    color: $TEXT !important;
 }
 
-/* dataframes / tables: tighter, hairline */
-[data-testid="stDataFrame"] { border: 1px solid #D8D4CC; border-radius: 6px; }
+/* dataframes container */
+[data-testid="stDataFrame"] { border: 1px solid $HAIR; border-radius: 6px; }
 
-/* number inputs / selects: subtle borders */
-[data-baseweb="input"], [data-baseweb="select"] > div {
-    border-color: #D8D4CC !important;
+/* captions */
+.stCaption, [data-testid="stCaptionContainer"] { color: $FAINT !important; }
+
+/* st.status / alerts harmonize with card bg */
+[data-testid="stStatusWidget"], [data-testid="stExpanderDetails"] {
+    background: transparent;
 }
-
-/* st.info/success/warning accents stay default; captions slightly faint */
-.stCaption, [data-testid="stCaptionContainer"] { color: #999999 !important; }
 </style>
-""", unsafe_allow_html=True)
+""").substitute(_PAL), unsafe_allow_html=True)
 EXCEL_PATH = BASE_DIR.parent / "ＰＬ_補ありなしPPAEPC_260317_XXXX様_v3.3.1.xlsm"
 SAVE_DIR = BASE_DIR / "saved_cases"
 SAVE_DIR.mkdir(exist_ok=True)
@@ -682,6 +758,10 @@ def _render_demand_cut_analysis() -> None:
         annotation_position="top left",
     )
     fig1.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#A8B0BA" if st.session_state.get("dark_mode_toggle") else "#666666"),
+
         title="① PV導入前 ピーク期間",
         xaxis=dict(
             tickvals=_w1_tickvals, ticktext=_w1_ticktext,
@@ -727,6 +807,10 @@ def _render_demand_cut_analysis() -> None:
         annotation_position="bottom left",
     )
     fig2.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#A8B0BA" if st.session_state.get("dark_mode_toggle") else "#666666"),
+
         title="② PV導入後 ピーク期間",
         xaxis=dict(
             tickvals=_w2_tickvals, ticktext=_w2_ticktext,
@@ -2861,7 +2945,7 @@ with tab3:
                     for sid in _merged
                 ],
                 direction="vertical",
-                custom_style=_SORTABLE_STYLE,
+                custom_style=_sortable_style(_DARK),
                 key="slide_sorter",
             )
             final_slides = [item.split("  ─  ")[0].strip() for item in sorted_slides]
