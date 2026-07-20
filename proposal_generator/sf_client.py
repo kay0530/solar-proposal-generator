@@ -114,23 +114,54 @@ def _get_connection() -> "Salesforce | None":
     return None
 
 
+def _is_session_expired(exc: Exception) -> bool:
+    """Detect an expired/invalid Salesforce session from the exception."""
+    msg = str(exc)
+    return "INVALID_SESSION_ID" in msg or "Session expired" in msg
+
+
+def _run_query(conn: "Salesforce", soql: str) -> list[dict]:
+    """Run the SOQL query and strip Salesforce 'attributes' metadata."""
+    result = conn.query_all(soql)
+    records = result.get("records", [])
+    cleaned = []
+    for rec in records:
+        clean = {k: v for k, v in rec.items() if k != "attributes"}
+        for k, v in clean.items():
+            if isinstance(v, dict) and "attributes" in v:
+                clean[k] = {kk: vv for kk, vv in v.items() if kk != "attributes"}
+        cleaned.append(clean)
+    return cleaned
+
+
 def sf_query(soql: str) -> list[dict]:
-    """Execute a SOQL query and return records list."""
+    """Execute a SOQL query and return records list.
+
+    On an expired/invalid session (cached access token gone stale), clear the
+    cached connection, re-authenticate once, and retry. If the retry also
+    fails, surface a visible warning instead of silently returning [] so the
+    user does not mistake an auth failure for "no matching records".
+    """
     conn = _get_connection()
     if conn is None:
         return []
     try:
-        result = conn.query_all(soql)
-        records = result.get("records", [])
-        cleaned = []
-        for rec in records:
-            clean = {k: v for k, v in rec.items() if k != "attributes"}
-            for k, v in clean.items():
-                if isinstance(v, dict) and "attributes" in v:
-                    clean[k] = {kk: vv for kk, vv in v.items() if kk != "attributes"}
-            cleaned.append(clean)
-        return cleaned
+        return _run_query(conn, soql)
     except Exception as e:
+        if _is_session_expired(e):
+            logger.warning("Salesforce session expired; clearing cache and retrying once.")
+            try:
+                _get_connection.clear()
+            except Exception:  # pragma: no cover - cache clear best effort
+                pass
+            conn = _get_connection()
+            if conn is not None:
+                try:
+                    return _run_query(conn, soql)
+                except Exception as e2:
+                    logger.error("sf_query retry after re-auth failed: %s", e2)
+            st.warning("Salesforce接続の再認証に失敗しました。ページを再読み込みするか、認証情報を確認してください。")
+            return []
         logger.error("sf_query failed: %s", e)
         return []
 

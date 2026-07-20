@@ -40,5 +40,12 @@ output/
 Thumbs.db
 desktop.ini
 
+# Saved cases / local config / autosave (customer data - never commit to public repo)
+proposal_generator/saved_cases/
+**/box_config.json
+*.xlsm
+_autosave.json
+**/_autosave.json
+
 # Misc
 *.log

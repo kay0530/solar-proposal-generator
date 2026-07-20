@@ -50,7 +50,9 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
 
     # ---- Lead: customer name + hearing date ----
     lead_who = f"{company}　様" if company else "お客様"
-    lead = f"{lead_who}　｜　ヒアリング実施日：{data.get('proposal_date', '—') or '—'}"
+    # Excel-calc path may return proposal_date as datetime; keep date part only
+    prop_date = str(data.get("proposal_date", "") or "—").split(" ")[0]
+    lead = f"{lead_who}　｜　ヒアリング実施日：{prop_date}"
     add_textbox(slide, MARGIN, ys[0], content_w, lead_h, lead,
                 font_size_pt=SIZE_BODY, font_color=C_SUB)
 

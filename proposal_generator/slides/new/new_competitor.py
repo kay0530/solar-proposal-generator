@@ -86,8 +86,12 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
                 min_gap=GAP_CARD)
 
     # ---- Lead ----
+    # Match the price-item wording to the table rows (same check as
+    # _resolve_rows): EPC decks compare kW単価, PPA decks compare PPA単価.
+    price_item = ("kW単価" if data.get("proposal_type") == "epc"
+                  else "PPA単価")
     add_textbox(slide, MARGIN, ys[0], content_w, lead_h,
-                "PPA単価・サービス・実績など、主要項目で他社と比較しました。",
+                f"{price_item}・サービス・実績など、主要項目で他社と比較しました。",
                 font_size_pt=SIZE_BODY, font_color=C_SUB)
 
     # ---- Audited comparison table ----

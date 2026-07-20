@@ -25,10 +25,19 @@ from proposal_generator.utils import (
 TITLE = "まとめ"
 EYEBROW = "06｜まとめ"
 
-NEXT_STEPS = [
+# Step 3 differs by proposal type: PPA closes a PPA contract,
+# EPC closes an equipment sales (EPC) contract.
+NEXT_STEPS_PPA = [
     "現地調査の実施（屋根荷重・電気設備確認）",
     "補助金申請書類の準備・申請",
     "PPA契約書の確認・締結",
+    "設備設計・施工（着工〜運転開始まで約3〜4ヶ月）",
+]
+
+NEXT_STEPS_EPC = [
+    "現地調査の実施（屋根荷重・電気設備確認）",
+    "補助金申請書類の準備・申請",
+    "売買契約（EPC契約）の確認・締結",
     "設備設計・施工（着工〜運転開始まで約3〜4ヶ月）",
 ]
 
@@ -48,7 +57,12 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     content_w = SLIDE_W - MARGIN * 2
     company = data.get("company_name") or ""
     is_epc = data.get("proposal_type") == "epc"
-    years = data.get("contract_years") or 20
+    # Excel path may deliver contract_years as float (e.g. 20.0); guard like
+    # the other slides so labels render "20年" not "20.0年"
+    try:
+        years = int(float(data.get("contract_years") or 20))
+    except (TypeError, ValueError):
+        years = 20
     saving = data.get("annual_cost_saving")
     co2 = data.get("co2_annual_t")
     recovery = data.get("investment_recovery_yr")
@@ -98,7 +112,8 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     list_y = int(steps_y) + int(Inches(0.34))
     marker_d = Inches(0.30)
     col_w = (int(content_w) - int(GAP_CARD)) // 2
-    for idx, step in enumerate(NEXT_STEPS):
+    next_steps = NEXT_STEPS_EPC if is_epc else NEXT_STEPS_PPA
+    for idx, step in enumerate(next_steps):
         col = idx % 2
         row = idx // 2
         sx = int(MARGIN) + col * (col_w + int(GAP_CARD))

@@ -71,12 +71,11 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     elec_rate = max(avg_unit_price - surcharge, 0) if avg_unit_price > 0 else 0
     total_unit = elec_rate + surcharge if avg_unit_price > 0 else 0
 
+    # basic_rate_kw comes from app.py (contract master / manual input).
+    # Do NOT try to derive it as annual_cost - avg_unit_price*annual_kwh:
+    # avg_unit_price == annual_cost/annual_kwh makes that an identity whose
+    # float noise could bypass the fallback and zero out the demand saving.
     basic_rate_kw = float(data.get("basic_rate_kw", 0) or 0)
-    if basic_rate_kw <= 0 and annual_cost and contract_kw > 0 and annual_kwh > 0:
-        usage_cost = avg_unit_price * annual_kwh
-        basic_annual = float(annual_cost) - usage_cost
-        if basic_annual > 0:
-            basic_rate_kw = basic_annual / contract_kw / 12
     if basic_rate_kw <= 0:
         basic_rate_kw = 1500.0  # last resort typical high-voltage basic rate
 

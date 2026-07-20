@@ -128,8 +128,10 @@ def _fmt_pct(val) -> str:
         return "—"
     try:
         v = float(val)
-        # If value is <= 1, assume it's a ratio
-        if v <= 1.0:
+        # If value is <= 1 (with a small tolerance so an exact 1.0 ratio and
+        # tiny float rounding errors are treated as a ratio, not an already-%
+        # value), assume it's a 0-1 ratio and scale to percent.
+        if v <= 1.0 + 1e-9:
             v *= 100
         return f"{v:.1f}"
     except (TypeError, ValueError):

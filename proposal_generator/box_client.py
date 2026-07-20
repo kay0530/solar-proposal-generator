@@ -386,9 +386,21 @@ def upload_file(folder_id: str, file_path: Path, filename: str = None) -> dict:
             files={"file": (fname, f)},
         )
     if resp.status_code == 409:
-        # File already exists - upload new version
-        existing_id = resp.json()["context_info"]["conflicts"]["id"]
-        return upload_new_version(existing_id, file_path, fname)
+        # File already exists - upload new version.
+        # Box may return "conflicts" as either a single object or a list,
+        # and context_info can be absent. Extract defensively; if the id is
+        # unavailable, fall through to raise_for_status below.
+        existing_id = None
+        try:
+            conflicts = resp.json().get("context_info", {}).get("conflicts")
+            if isinstance(conflicts, dict):
+                existing_id = conflicts.get("id")
+            elif isinstance(conflicts, list) and conflicts:
+                existing_id = conflicts[0].get("id")
+        except (ValueError, AttributeError, KeyError, IndexError, TypeError):
+            existing_id = None
+        if existing_id:
+            return upload_new_version(existing_id, file_path, fname)
     resp.raise_for_status()
     entry = resp.json()["entries"][0]
     return {"id": entry["id"], "name": entry["name"]}

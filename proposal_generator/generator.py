@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from pptx import Presentation
+from pptx.oxml.ns import qn
 from pptx.util import Inches
 
 from proposal_generator.utils import SLIDE_W, SLIDE_H
@@ -212,6 +213,15 @@ def generate_proposal(
         except Exception as e:
             results["slides_skipped"].append(slide_id)
             results["warnings"].append(f"{slide_id} 生成エラー: {e}")
+            # Remove the partially-drawn slide so it does not remain in the
+            # saved PPTX (a skipped slide must not appear in the deck).
+            try:
+                slide_elem = prs.slides._sldIdLst[-1]
+                prs.part.drop_rel(slide_elem.get(qn("r:id")))
+                prs.slides._sldIdLst.remove(slide_elem)
+            except Exception:
+                # Removal is best-effort; keep generating remaining slides.
+                pass
 
     # Save
     prs.save(str(output_path))

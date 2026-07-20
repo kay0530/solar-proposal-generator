@@ -46,7 +46,7 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
 
     data keys used:
         system_capacity_kw, panel_total_kw, selling_price, subsidy_amount,
-        kw_unit_cost, panels (list of {model, watt_per_unit, count}),
+        panels (list of {model, watt_per_unit, count}),
         pcs_list (list of PCS specs),
         batteries (list of {model, kwh_per_unit, count, total_kwh}),
         battery_total_kwh
@@ -57,7 +57,6 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     panel_kw       = data.get("panel_total_kw")
     selling_price  = data.get("selling_price")
     subsidy_amount = data.get("subsidy_amount", 0) or 0
-    kw_unit_cost   = data.get("kw_unit_cost", 0) or 0
     panels         = data.get("panels", []) or []
     pcs_list       = data.get("pcs_list", []) or []
     batteries      = data.get("batteries") or []
@@ -72,7 +71,14 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
     content_w = SLIDE_W - MARGIN * 2
 
     # ---- KPI card row ----
-    has_kw_cost = bool(kw_unit_cost) and kw_unit_cost > 0
+    # Customer-facing kW unit price = selling price / system capacity
+    # (same definition as pp_estimate). Never show internal kw_unit_cost.
+    try:
+        kw_price = (int(float(selling_price) / float(capacity))
+                    if selling_price and capacity and float(capacity) > 0
+                    else 0)
+    except (TypeError, ValueError):
+        kw_price = 0
     sp_num, sp_unit = _yen_parts(selling_price)
     kpis = [
         (fmt_num(capacity, 1), "kW", "システム容量"),
@@ -83,8 +89,8 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         kpis.append((np_num, np_unit, "実質投資額（補助金控除後）"))
     else:
         kpis.append((sp_num, sp_unit, "投資額"))
-    if has_kw_cost:
-        kpis.append((fmt_num(kw_unit_cost, 0), "円/kW", "kW単価"))
+    if kw_price > 0:
+        kpis.append((fmt_num(kw_price, 0), "円/kW", "kW単価"))
 
     kpi_h = Inches(1.00)
     card_w = (content_w - GAP_CARD * (len(kpis) - 1)) / len(kpis)
@@ -147,9 +153,12 @@ def generate(slide, data: dict, logo_path: Path = None) -> None:
         pcs_rows.append(["メーカー / 型式", "容量 (kW)", "台数"])
         for pcs in pcs_list:
             model = pcs.get("model", "—")
-            cap   = pcs.get("capacity_kw", "—")
+            # App-built pcs_list uses "kw_per_unit"; keep "capacity_kw"
+            # as a legacy fallback for older saved data.
+            cap   = pcs.get("kw_per_unit") or pcs.get("capacity_kw") or "—"
             count = pcs.get("count", 1)
-            pcs_rows.append([model, str(cap), str(count)])
+            pcs_rows.append([model, fmt_num(cap, 1) if cap != "—" else "—",
+                             str(count)])
     blocks.append(_section_block(
         "パワーコンディショナ（PCS）仕様", pcs_rows, col_widths_3,
         "PCS仕様：詳細は別途ご案内"))

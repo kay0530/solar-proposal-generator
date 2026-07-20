@@ -160,14 +160,19 @@ def run_excel_calculation(
     except ImportError:
         raise RuntimeError("xlwings is required. Run: python -m pip install xlwings")
 
-    app = xw.App(visible=False, add_book=False)
+    app = None
+    wb = None
     try:
+        app = xw.App(visible=False, add_book=False)
         wb = app.books.open(str(excel_path))
 
         # --- Write customer input cells ---
         for field_name, (sheet_name, cell_addr) in INPUT_CELL_MAP.items():
             value = getattr(customer, field_name, None)
-            if value is not None and value != "" and value != 0.0 and value != 0:
+            # NOTE: 0 is a valid value (e.g. surplus price / subsidy / battery kWh).
+            # Only skip None and empty string so explicit zeros overwrite the
+            # template's leftover values from a previous case.
+            if value is not None and value != "":
                 wb.sheets[sheet_name].range(cell_addr).value = value
 
         # --- Write iPals data ---
@@ -193,8 +198,12 @@ def run_excel_calculation(
         return output
 
     finally:
-        wb.close()
-        app.quit()
+        # Guard against open() / App() having failed before wb/app were bound,
+        # so the original exception is not masked by a NameError here.
+        if wb is not None:
+            wb.close()
+        if app is not None:
+            app.quit()
 
 
 def _write_ipals_data(wb, csv_text: str, sheet_name: str) -> None:
