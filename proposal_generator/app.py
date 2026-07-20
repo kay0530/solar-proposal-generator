@@ -7,12 +7,14 @@ Run:
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re as _re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # Ensure parent dir is on sys.path so `from proposal_generator...` works from any CWD
@@ -45,10 +47,47 @@ PROFILES_PATH = BASE_DIR / "composition_profiles.yaml"
 def _auth_token(email: str, password: str) -> str:
     """Derive a stable auth token from email + password using HMAC-SHA256."""
     import hashlib
-    import hmac
     secret = password.encode("utf-8")
     message = email.lower().encode("utf-8")
     return hmac.new(secret, message, hashlib.sha256).hexdigest()[:32]
+
+
+# Login-attempt tracker shared across all sessions (intentional — we want a
+# global brute-force throttle). Streamlit re-executes this script as a fresh
+# __main__ module on every rerun, so a plain module-level list would be reset
+# to empty each run and the throttle would never trip. cache_resource lives in
+# the server process and survives reruns and sessions. GIL makes the simple
+# list updates safe enough; no explicit lock needed.
+_LOGIN_WINDOW_SEC = 600            # 10-minute sliding window
+_LOGIN_MAX_FAILURES = 10           # block after >10 failures in the window
+_LOGIN_BLOCK_SEC = 60              # reject submissions for 60s once tripped
+
+
+@st.cache_resource
+def _login_failure_store() -> list[float]:
+    """Timestamps (epoch seconds) of recent failures, process-wide."""
+    return []
+
+
+def _login_is_blocked() -> bool:
+    """True if too many recent failed logins (sliding window brute-force guard)."""
+    _failures = _login_failure_store()
+    now = time.time()
+    # Drop failures older than the window
+    _failures[:] = [t for t in _failures if now - t < _LOGIN_WINDOW_SEC]
+    if len(_failures) > _LOGIN_MAX_FAILURES:
+        # Still within the cool-off period after the most recent failure?
+        if now - _failures[-1] < _LOGIN_BLOCK_SEC:
+            return True
+    return False
+
+
+def _record_login_failure() -> None:
+    _login_failure_store().append(time.time())
+
+
+def _reset_login_failures() -> None:
+    _login_failure_store().clear()
 
 
 def _check_auth() -> bool:
@@ -64,9 +103,17 @@ def _check_auth() -> bool:
 
     try:
         _auth_pw = st.secrets["auth"]["password"]
-    except (KeyError, FileNotFoundError):
-        # No auth configured (local dev) — allow access
+    except FileNotFoundError:
+        # No secrets.toml at all (local dev) — allow access.
         return True
+    except KeyError:
+        # secrets exist but [auth]/password is missing → Cloud misconfig.
+        # Fail closed rather than silently granting access.
+        st.error(
+            "認証設定（[auth]）が見つかりません。"
+            "管理者は Streamlit Cloud の Secrets を確認してください"
+        )
+        st.stop()
 
     # Try to restore auth from URL query param
     try:
@@ -77,7 +124,13 @@ def _check_auth() -> bool:
     _url_token = st.query_params.get("t", "")
     if _url_token and _allowed_emails:
         for _em in _allowed_emails:
-            if _auth_token(_em, _auth_pw) == _url_token:
+            # Compare as bytes: compare_digest raises TypeError on str inputs
+            # containing non-ASCII characters (e.g. a tampered ?t= parameter),
+            # which would crash the app before the login form renders.
+            if hmac.compare_digest(
+                _auth_token(_em, _auth_pw).encode("ascii"),
+                _url_token.encode("utf-8", "replace"),
+            ):
                 st.session_state["_authenticated"] = True
                 st.session_state["_auth_email"] = _em
                 return True
@@ -96,17 +149,26 @@ def _check_auth() -> bool:
         _submit = st.form_submit_button("ログイン", use_container_width=True)
 
     if _submit:
+        if _login_is_blocked():
+            st.error("試行回数が上限に達しました。しばらく待ってから再試行してください")
+            return False
+
         if _allowed_emails and _email not in _allowed_emails:
+            _record_login_failure()
             st.error("許可されていないメールアドレスです")
             return False
 
-        if _pw == _auth_pw:
+        # Compare as bytes: compare_digest raises TypeError on non-ASCII str
+        # (full-width IME input or a non-ASCII configured password).
+        if hmac.compare_digest(_pw.encode("utf-8"), _auth_pw.encode("utf-8")):
+            _reset_login_failures()
             st.session_state["_authenticated"] = True
             st.session_state["_auth_email"] = _email
             # Persist auth in URL query param so page reload keeps user logged in
             st.query_params["t"] = _auth_token(_email, _auth_pw)
             st.rerun()
         else:
+            _record_login_failure()
             st.error("パスワードが正しくありません")
     return False
 
@@ -340,11 +402,18 @@ if not Path(_SF_CMD).exists():
     _SF_CMD = "sf"
 
 
+_ANSI_RE = _re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _sf_query_cli(query: str, timeout: int = 20) -> list[dict]:
     """Run a SOQL query via sf CLI and return records list (local fallback)."""
     escaped_query = query.replace("%", "%%")
     cmd = f'"{_SF_CMD}" data query --query "{escaped_query}" --json'
-    kwargs: dict = dict(capture_output=True, timeout=timeout, shell=True)
+    # Force plain output: sf CLI honours FORCE_COLOR even when piped, and
+    # ANSI colour codes around the JSON break json.loads.
+    env = {k: v for k, v in os.environ.items() if k != "FORCE_COLOR"}
+    env["NO_COLOR"] = "1"
+    kwargs: dict = dict(capture_output=True, timeout=timeout, shell=True, env=env)
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     result = subprocess.run(cmd, **kwargs)
@@ -352,8 +421,18 @@ def _sf_query_cli(query: str, timeout: int = 20) -> list[dict]:
     if not stdout_bytes:
         stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
         raise RuntimeError(f"sf query returned no stdout (rc={result.returncode}): {stderr[:200]}")
-    out = stdout_bytes.decode("utf-8", errors="replace")
-    data = json.loads(out)
+    out = _ANSI_RE.sub("", stdout_bytes.decode("utf-8", errors="replace"))
+    try:
+        data = json.loads(out)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"sf query output is not JSON ({e}); stdout head: {out[:300]!r}"
+        ) from e
+    if data.get("status") != 0:
+        # sf CLI reports query errors as JSON with non-zero status; surface them
+        # instead of silently treating the response as an empty record set.
+        msg = data.get("message") or data.get("name") or str(data)[:200]
+        raise RuntimeError(f"sf query error: {msg}")
     return data.get("result", {}).get("records", [])
 
 
@@ -871,17 +950,29 @@ def sf_search_opportunities(keyword: str) -> list[dict]:
     """Search Salesforce opportunities by name. Cached 5min."""
     safe_kw = keyword.replace("'", "").replace('"', "")
     tokens = _tokenize_keyword(safe_kw)
-    like_clauses = " AND ".join(f"Name LIKE '%{t}%'" for t in tokens)
+
+    def _escape_soql_like(t: str) -> str:
+        # Escape SOQL LIKE special chars. Backslash first so we don't
+        # double-escape the escapes we add for % and _.
+        return (
+            t.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+
+    like_clauses = " AND ".join(
+        f"Name LIKE '%{_escape_soql_like(t)}%'" for t in tokens
+    )
     query = (
         f"SELECT Id, Name, AccountId, Account.Name, "
         f"Account.BillingStreet, Account.BillingCity, Account.BillingState "
         f"FROM Opportunity WHERE {like_clauses} "
         f"ORDER BY LastModifiedDate DESC LIMIT 20"
     )
-    try:
-        return _sf_query(query)
-    except Exception:
-        return []
+    # Let errors propagate: st.cache_data does not cache exceptions, so a
+    # transient SF failure is not cached as an empty result for 5 minutes.
+    # The caller shows the error to the user.
+    return _sf_query(query)
 
 
 # ---------------------------------------------------------------------------
@@ -1135,9 +1226,9 @@ def _restore_widget_keys(data: dict) -> None:
         "gross_margin_pct": "gross_margin_input",
         "sales_commission_pct": "commission_input",
         "ppa_unit_price": "ppa_price_input",
-        "subsidy_name": "subsidy_select",
         "lease_company": "lease_company",
         "lease_years": "lease_years_input",
+        "contract_years": "contract_years_input",
         "contract_kw": "contract_kw",
         "annual_kwh": "annual_kwh",
         "elec_company": "elec_company",
@@ -1162,6 +1253,34 @@ def _restore_widget_keys(data: dict) -> None:
         if src in data and data[src] is not None:
             st.session_state[dst] = data[src]
 
+    # Subsidy: a manually-entered subsidy_name is NOT in the selectbox options
+    # (Streamlit silently resets unknown values to the first option "なし"),
+    # so map it back to the 手動入力 branch and restore its own widget keys.
+    _SUBSIDY_SELECT_OPTIONS = {
+        "なし", "環境省（ストレージパリティ）", "東京都", "神奈川県",
+        "埼玉県", "埼玉県（CO2排出削減・EPC専用）", "群馬県", "静岡県",
+        "山梨県", "手動入力",
+    }
+    if "subsidy_name" in data and data["subsidy_name"] is not None:
+        _sub_name = str(data["subsidy_name"])
+        if not _sub_name:
+            st.session_state["subsidy_select"] = "なし"
+        elif _sub_name in _SUBSIDY_SELECT_OPTIONS:
+            st.session_state["subsidy_select"] = _sub_name
+            if _sub_name == "山梨県" and data.get("subsidy_amount") is not None:
+                try:
+                    st.session_state["subsidy_yamanashi_amount"] = int(data["subsidy_amount"])
+                except (ValueError, TypeError):
+                    pass
+        else:
+            st.session_state["subsidy_select"] = "手動入力"
+            st.session_state["subsidy_manual_name"] = _sub_name
+            if data.get("subsidy_amount") is not None:
+                try:
+                    st.session_state["subsidy_manual_amount"] = int(data["subsidy_amount"])
+                except (ValueError, TypeError):
+                    pass
+
     # 提案日: ISO string -> datetime.date for the date_input widget
     if data.get("proposal_date"):
         try:
@@ -1176,6 +1295,17 @@ def _restore_widget_keys(data: dict) -> None:
     if data.get("surplus_price") is not None:
         try:
             st.session_state["surplus_price_input"] = float(data["surplus_price"])
+        except (ValueError, TypeError):
+            pass
+    if data.get("ce_target_irr_pct") is not None:
+        try:
+            st.session_state["ce_target_irr_input"] = float(data["ce_target_irr_pct"])
+        except (ValueError, TypeError):
+            pass
+    # lease_rate 0.0 means シーエナジー (auto-calculated) — keep the widget default
+    if data.get("lease_rate"):
+        try:
+            st.session_state["lease_rate_input"] = float(data["lease_rate"])
         except (ValueError, TypeError):
             pass
     if data.get("demand_reduction_kw") is not None:
@@ -1205,6 +1335,21 @@ def _restore_widget_keys(data: dict) -> None:
             pass
 
     # Restore additional fields not in _DIRECT
+    # Manual (new-power) electricity path: its inputs live under manual_*
+    # widget keys, so route the saved values back to them.
+    if data.get("elec_company") == "その他（新電力・手入力）":
+        try:
+            if data.get("contract_kw") is not None:
+                st.session_state["manual_contract_kw"] = float(data["contract_kw"])
+            if data.get("annual_kwh") is not None:
+                st.session_state["manual_annual_kwh"] = int(data["annual_kwh"])
+            if data.get("basic_rate_kw") is not None:
+                st.session_state["manual_basic"] = float(data["basic_rate_kw"])
+            if data.get("manual_unit_rate") is not None:
+                st.session_state["manual_rate"] = float(data["manual_unit_rate"])
+        except (ValueError, TypeError):
+            pass
+
     if "snow_depth" in data:
         st.session_state["snow_depth"] = data["snow_depth"]
     if "site_survey" in data:
@@ -1284,7 +1429,9 @@ def _restore_widget_keys(data: dict) -> None:
             "cashflow_table": data["cashflow_table"],
         }
 
-    # Restore FIP calc result if present
+    # Restore FIP calc result if present. When the loaded case has no FIP
+    # result, drop any stale one from a previously loaded case so the old
+    # figures do not leak into the NEW_fip slide of the new proposal.
     if data.get("fip_net_revenue"):
         st.session_state["fip_calc_result"] = {
             "gross_revenue": data.get("fip_gross_revenue", 0),
@@ -1292,6 +1439,25 @@ def _restore_widget_keys(data: dict) -> None:
             "net_revenue": data.get("fip_net_revenue", 0),
             "effective_rate": data.get("fip_effective_rate", 0),
         }
+    else:
+        st.session_state.pop("fip_calc_result", None)
+
+    # Restore extra estimate line items into their widget keys; reset rows
+    # beyond the loaded list so a previous case's items do not linger.
+    _extra_saved = data.get("estimate_extra_items", []) or []
+    for _ei_idx in range(3):
+        if _ei_idx < len(_extra_saved) and isinstance(_extra_saved[_ei_idx], dict):
+            _ei_item = _extra_saved[_ei_idx]
+            st.session_state[f"est_extra_name_{_ei_idx}"] = str(_ei_item.get("name", ""))
+            st.session_state[f"est_extra_qty_{_ei_idx}"] = str(_ei_item.get("qty", "") or "")
+            try:
+                st.session_state[f"est_extra_amt_{_ei_idx}"] = int(_ei_item.get("amount", 0) or 0)
+            except (ValueError, TypeError):
+                st.session_state[f"est_extra_amt_{_ei_idx}"] = 0
+        else:
+            st.session_state[f"est_extra_name_{_ei_idx}"] = ""
+            st.session_state[f"est_extra_qty_{_ei_idx}"] = ""
+            st.session_state[f"est_extra_amt_{_ei_idx}"] = 0
 
     # Restore equipment data into manual input widget keys
     panels = data.get("panels", [])
@@ -1480,16 +1646,18 @@ with tab1:
                 st.info("保存済みの案件はありません")
 
             _upload = st.file_uploader("またはJSONをアップロード", type=["json"], key="upload_case")
-            if _upload and not st.session_state.get("_upload_processed"):
+            # Track the processed file by id (not a bool) so swapping to a
+            # different JSON without clearing the uploader is re-processed.
+            if _upload and st.session_state.get("_upload_processed") != _upload.file_id:
                 _loaded = json.load(_upload)
                 st.session_state["customer_data"] = _loaded
                 st.session_state["sf_company"] = _loaded.get("company_name", "")
                 st.session_state["sf_office"] = _loaded.get("office_name", "")
                 st.session_state["sf_address"] = _loaded.get("address", "")
                 _restore_widget_keys(_loaded)
-                st.session_state["_upload_processed"] = True
+                st.session_state["_upload_processed"] = _upload.file_id
                 st.rerun()
-            elif _upload and st.session_state.get("_upload_processed"):
+            elif _upload and st.session_state.get("_upload_processed") == _upload.file_id:
                 st.success("アップロードしたデータを読み込みました")
             if not _upload:
                 st.session_state.pop("_upload_processed", None)
@@ -1497,14 +1665,29 @@ with tab1:
     with st.expander("🔍 Salesforceから取引先・商談を検索", expanded=True):
         _sf_status = "🟢 API接続" if _sf_cloud.is_available() else "🔴 API未接続（CLIフォールバック）"
         st.caption(f"Salesforce: {_sf_status}")
+        def _on_sf_keyword_change():
+            # The opportunity selectbox is position-based (options=range(N)).
+            # If the keyword changes and the new result list happens to have
+            # the same length, the old index would silently select an
+            # unrelated opportunity — reset the selection on keyword change.
+            st.session_state.pop("sf_selected_idx", None)
+
         sf_keyword = st.text_input(
             "商談名で検索（Enter で実行）",
             placeholder="例：田中貴金属、Mizkan、コスモ精機 など",
             key="sf_keyword",
+            on_change=_on_sf_keyword_change,
         )
 
         if sf_keyword:
-            opp_records = sf_search_opportunities(sf_keyword)
+            try:
+                opp_records = sf_search_opportunities(sf_keyword)
+            except Exception as _sf_err:
+                opp_records = []
+                st.warning(f"Salesforce検索エラー: {_sf_err}")
+            else:
+                if not opp_records:
+                    st.caption(f"「{sf_keyword}」に一致する商談が見つかりません（0件）")
             if opp_records:
                 opp_options = [
                     f"{r['Name']}  ／  {r.get('Account', {}).get('Name', '—')}"
@@ -1521,15 +1704,21 @@ with tab1:
                 if selected_idx is not None:
                     sel = opp_records[selected_idx]
                     acct = sel.get("Account") or {}
-                    parts = [
-                        acct.get("BillingState", ""),
-                        acct.get("BillingCity", ""),
-                        acct.get("BillingStreet", ""),
-                    ]
-                    st.session_state["sf_company"] = acct.get("Name", "")
-                    st.session_state["sf_office"] = sel.get("Name", "")
-                    st.session_state["sf_address"] = "".join(p for p in parts if p)
-                    st.session_state["sf_opp_id"] = sel.get("Id", "")
+                    # Apply SF values only when the selected opportunity Id
+                    # changes; re-applying every rerun would instantly revert
+                    # manual edits made in the correction expander below.
+                    _sel_opp_id = sel.get("Id", "")
+                    if st.session_state.get("_sf_last_applied_opp") != _sel_opp_id:
+                        parts = [
+                            acct.get("BillingState", ""),
+                            acct.get("BillingCity", ""),
+                            acct.get("BillingStreet", ""),
+                        ]
+                        st.session_state["sf_company"] = acct.get("Name", "")
+                        st.session_state["sf_office"] = sel.get("Name", "")
+                        st.session_state["sf_address"] = "".join(p for p in parts if p)
+                        st.session_state["sf_opp_id"] = _sel_opp_id
+                        st.session_state["_sf_last_applied_opp"] = _sel_opp_id
 
                     # Auto-connect Box folder for selected deal
                     from proposal_generator.box_client import is_available as _box_ok
@@ -1658,6 +1847,11 @@ with tab1:
                             st.session_state["sf_company"] = _loaded.get("company_name", "")
                             st.session_state["sf_office"] = _loaded.get("office_name", "")
                             st.session_state["sf_address"] = _loaded.get("address", "")
+                            # Restore widget keys like the other load paths —
+                            # otherwise Tab2 rebuilds customer_data from the
+                            # current widget values on the next rerun and the
+                            # loaded content is discarded.
+                            _restore_widget_keys(_loaded)
                             st.toast(f"Boxから読み込みました: {_box_sel}", icon="📦")
                             st.rerun()
                         except Exception as e:
@@ -1959,11 +2153,20 @@ with tab2:
             subsidy_name = ""
             subsidy_amount = 0
         elif _sub_sel == "手動入力":
-            subsidy_name = st.text_input("補助金名", placeholder="例：東京都補助金")
-            subsidy_amount = st.number_input("補助金額 (円)", min_value=0, step=10000, value=0)
+            subsidy_name = st.text_input(
+                "補助金名", placeholder="例：東京都補助金",
+                key="subsidy_manual_name",
+            )
+            subsidy_amount = st.number_input(
+                "補助金額 (円)", min_value=0, step=10000, value=0,
+                key="subsidy_manual_amount",
+            )
         elif _sub_sel == "山梨県":
             subsidy_name = "山梨県"
-            subsidy_amount = st.number_input("補助金額 (円)（山梨県は手動入力）", min_value=0, step=10000, value=0)
+            subsidy_amount = st.number_input(
+                "補助金額 (円)（山梨県は手動入力）", min_value=0, step=10000, value=0,
+                key="subsidy_yamanashi_amount",
+            )
             st.caption("山梨県の補助金計算は個別確認が必要です")
         else:
             # Map UI name to calc result name
@@ -2008,16 +2211,33 @@ with tab2:
             )
             if _layout_img is not None:
                 st.image(_layout_img, caption="レイアウト画像プレビュー", use_container_width=True)
-                # Save to temp file for PPTX generation
-                import base64 as _b64_img
-                import tempfile as _tmp_layout
-                _ext = Path(_layout_img.name).suffix or ".png"
-                _bytes = _layout_img.getvalue()
-                _tmp_path = Path(_tmp_layout.mktemp(suffix=_ext))
-                _tmp_path.write_bytes(_bytes)
-                st.session_state["layout_image_path"] = str(_tmp_path)
-                st.session_state["layout_image_b64"] = _b64_img.b64encode(_bytes).decode("ascii")
-                st.session_state["layout_image_ext"] = _ext
+                # Write the temp file only when the uploaded file changes —
+                # without this guard every rerun creates a new orphaned temp
+                # file (plus a base64 encode) while the image stays uploaded.
+                if st.session_state.get("_layout_file_id") != _layout_img.file_id:
+                    # Save to temp file for PPTX generation
+                    import base64 as _b64_img
+                    import tempfile as _tmp_layout
+                    _ext = Path(_layout_img.name).suffix or ".png"
+                    _bytes = _layout_img.getvalue()
+                    # Remove the previous temp file so files do not accumulate
+                    _old_layout = st.session_state.get("layout_image_path")
+                    if _old_layout:
+                        try:
+                            Path(_old_layout).unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                    # Use NamedTemporaryFile(delete=False) instead of the insecure
+                    # mktemp() (race condition / predictable name). We keep the file
+                    # on disk (delete=False) so downstream PPTX generation can read
+                    # it back by path.
+                    with _tmp_layout.NamedTemporaryFile(delete=False, suffix=_ext) as _tf:
+                        _tf.write(_bytes)
+                        _tmp_path = Path(_tf.name)
+                    st.session_state["layout_image_path"] = str(_tmp_path)
+                    st.session_state["layout_image_b64"] = _b64_img.b64encode(_bytes).decode("ascii")
+                    st.session_state["layout_image_ext"] = _ext
+                    st.session_state["_layout_file_id"] = _layout_img.file_id
             elif st.session_state.get("layout_image_path") and Path(st.session_state["layout_image_path"]).exists():
                 # Preview persisted image (loaded from saved JSON)
                 st.image(
@@ -2026,7 +2246,8 @@ with tab2:
                     use_container_width=True,
                 )
                 if st.button("画像をクリア", key="_clear_layout_img"):
-                    for _k in ("layout_image_path", "layout_image_b64", "layout_image_ext"):
+                    for _k in ("layout_image_path", "layout_image_b64",
+                               "layout_image_ext", "_layout_file_id"):
                         st.session_state.pop(_k, None)
                     st.rerun()
 
@@ -2060,9 +2281,11 @@ with tab2:
 
         with _layout_col2:
             st.markdown("**積載荷重計算表**")
+            # NOTE: no "xls" here — load_calc.py reads via openpyxl, which
+            # cannot open the legacy .xls format (always fails).
             _load_calc_file = st.file_uploader(
                 "積載荷重計算表Excelをアップロード",
-                type=["xlsx", "xlsm", "xls"],
+                type=["xlsx", "xlsm"],
                 key="load_calc_file",
                 help="積載荷重計算表Excel（まとめシートから読み込みます）",
             )
@@ -2130,7 +2353,12 @@ with tab2:
         if is_epc:
             ct_col1, ct_col2 = st.columns(2)
             with ct_col1:
-                contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
+                # Same key as the PPA branch (branches are mutually exclusive)
+                # so saved contract_years restores into either mode.
+                contract_years = st.number_input(
+                    "契約期間 (年)", min_value=1, max_value=30, value=20,
+                    key="contract_years_input",
+                )
             with ct_col2:
                 demand_reduction = st.number_input(
                     "削減デマンド (kW)", min_value=0.0, step=1.0,
@@ -2141,7 +2369,10 @@ with tab2:
         else:
             ct_col1, ct_col2, ct_col3, ct_col4 = st.columns(4)
             with ct_col1:
-                contract_years = st.number_input("契約期間 (年)", min_value=1, max_value=30, value=20)
+                contract_years = st.number_input(
+                    "契約期間 (年)", min_value=1, max_value=30, value=20,
+                    key="contract_years_input",
+                )
             with ct_col2:
                 def _mark_ppa_price_manual():
                     """User edited PPA price directly — stop auto-calc from overwriting it."""
@@ -2167,6 +2398,10 @@ with tab2:
 
         # ----- Current Electricity Cost (contract master based) -----
         st.markdown("**現在の電気料金**")
+        # Basic-charge unit price (yen/kW/month) actually shown in the UI —
+        # passed to customer_data so PP8/PP9/EP4/EP5 use the real contract
+        # rate instead of their hard-coded fallbacks.
+        _basic_rate_for_cd = 0.0
         _elec_master = load_electricity_master()
         if _elec_master:
             _companies = sorted(set(r["company"] for r in _elec_master))
@@ -2181,6 +2416,7 @@ with tab2:
                 if _elec_contract:
                     _sel = next((r for r in _contracts if r["contract"] == _elec_contract), None)
                     if _sel:
+                        _basic_rate_for_cd = float(_sel["basic"] or 0)
                         _ec1, _ec2, _ec3 = st.columns(3)
                         with _ec1:
                             st.metric("基本料金", f"¥{_sel['basic']:,.1f}/kW")
@@ -2235,6 +2471,7 @@ with tab2:
                 _basic_annual = _manual_basic * _manual_kw * 12
                 _usage_annual = _manual_rate * _manual_kwh
                 annual_elec_cost = int(_basic_annual + _usage_annual)
+                _basic_rate_for_cd = float(_manual_basic or 0)
                 if annual_elec_cost > 0:
                     st.caption(f"年間電気代（概算）: **¥{annual_elec_cost:,.0f}**")
             else:
@@ -2262,7 +2499,14 @@ with tab2:
             # Show rate info for known companies
             from proposal_generator.ppa_calc import LEASE_RATE_MAP, CE_TARGET_IRR
             if lease_company == "シーエナジー":
-                st.info(f"**シーエナジー**: 目標IRR **{CE_TARGET_IRR*100:.2f}%** → リース金利は試算時に自動算出")
+                st.info("**シーエナジー**: 目標IRRからリース金利を試算時に自動算出します")
+                st.number_input(
+                    "CE目標IRR (%)",
+                    min_value=0.5, max_value=10.0,
+                    value=CE_TARGET_IRR * 100, step=0.05, format="%.2f",
+                    key="ce_target_irr_input",
+                    help=f"シーエナジーの目標IRR。デフォルト {CE_TARGET_IRR*100:.2f}%（案件ごとに調整可能）",
+                )
                 lease_rate = 0.0  # auto-calculated in ppa_calc
             elif lease_company in LEASE_RATE_MAP:
                 _known_rate = LEASE_RATE_MAP[lease_company]
@@ -2291,6 +2535,7 @@ with tab2:
                 auto_calc_ppa,
                 DEFAULT_MAINTENANCE_YEN_PER_KW,
                 DEFAULT_INSURANCE_YEN_FIXED,
+                CE_TARGET_IRR,
             )
 
             _ipals_now = st.session_state.get("ipals_data", {})
@@ -2431,6 +2676,7 @@ with tab2:
                     target_dscr=_target_dscr,
                     maintenance_yen_per_kw=_maint_per_kw,
                     insurance_yen_fixed=_insure_fixed + _om_additional,
+                    ce_target_irr=st.session_state.get("ce_target_irr_input", CE_TARGET_IRR * 100) / 100,
                 )
                 st.session_state["ppa_calc_result"] = _result
                 # Auto-apply calculated price if not manually set
@@ -2455,7 +2701,7 @@ with tab2:
                 with _cols[2]:
                     st.metric("実効金利", f"{_calc_res['effective_rate_pct']:.2f}%")
                 with _cols[3]:
-                    st.metric("最小PPA単価（DSCR達成）", f"{_calc_res['min_ppa_price']:.2f} 円/kWh")
+                    st.metric("最小PPA単価（平均DSCR基準）", f"{_calc_res['min_ppa_price']:.2f} 円/kWh")
                 with _cols[4]:
                     _ad = _calc_res.get("avg_dscr")
                     st.metric("平均DSCR", f"{_ad:.3f}" if _ad else "—")
@@ -2493,22 +2739,40 @@ with tab2:
                 if _cf:
                     import pandas as pd
                     _df = pd.DataFrame(_cf)
-                    _df.columns = ["年", "自家消費(kWh)", "余剰(kWh)", "PPA収入(円)",
-                                   "余剰収入(円)", "収入合計(円)", "リース料(円)", "O&M(円)",
-                                   "費用合計(円)", "純CF(円)", "DSCR"]
+                    # Map English keys -> Japanese labels. calc_cashflow_table adds
+                    # extra columns (fire_insurance / depreciation_tax / loan_*)
+                    # for bank-loan financing, so a fixed-length column list would
+                    # crash with ValueError. Rename by dict instead; any unmapped
+                    # column keeps its original key.
+                    _col_labels = {
+                        "year": "年",
+                        "self_consumption_kwh": "自家消費(kWh)",
+                        "surplus_kwh": "余剰(kWh)",
+                        "ppa_revenue": "PPA収入(円)",
+                        "surplus_revenue": "余剰収入(円)",
+                        "total_revenue": "収入合計(円)",
+                        "lease_payment": "リース料(円)",
+                        "om_cost": "O&M(円)",
+                        "fire_insurance": "火災保険(円)",
+                        "depreciation_tax": "償却資産税(円)",
+                        "loan_principal": "元金返済(円)",
+                        "loan_interest": "支払利息(円)",
+                        "total_cost": "費用合計(円)",
+                        "net_cashflow": "純CF(円)",
+                        "dscr": "DSCR",
+                    }
+                    _df = _df.rename(columns=_col_labels)
+                    _yen_cols = [
+                        "PPA収入(円)", "余剰収入(円)", "収入合計(円)", "リース料(円)",
+                        "O&M(円)", "火災保険(円)", "償却資産税(円)", "元金返済(円)",
+                        "支払利息(円)", "費用合計(円)", "純CF(円)",
+                    ]
+                    _kwh_cols = ["自家消費(kWh)", "余剰(kWh)"]
+                    _fmt_map = {c: "{:,.0f}" for c in _yen_cols + _kwh_cols if c in _df.columns}
+                    if "DSCR" in _df.columns:
+                        _fmt_map["DSCR"] = lambda x: f"{x:.3f}" if x else "—"
                     st.dataframe(
-                        _df.style.format({
-                            "自家消費(kWh)": "{:,.0f}",
-                            "余剰(kWh)": "{:,.0f}",
-                            "PPA収入(円)": "{:,.0f}",
-                            "余剰収入(円)": "{:,.0f}",
-                            "収入合計(円)": "{:,.0f}",
-                            "リース料(円)": "{:,.0f}",
-                            "O&M(円)": "{:,.0f}",
-                            "費用合計(円)": "{:,.0f}",
-                            "純CF(円)": "{:,.0f}",
-                            "DSCR": lambda x: f"{x:.3f}" if x else "—",
-                        }),
+                        _df.style.format(_fmt_map),
                         use_container_width=True,
                         height=300,
                     )
@@ -2586,6 +2850,10 @@ with tab2:
                 )
                 st.session_state["fip_calc_result"] = _fip_result
             else:
+                # No surplus in the current data set — drop any stale result
+                # from a previous case so old FIP revenue does not leak into
+                # customer_data and the NEW_fip slide.
+                st.session_state.pop("fip_calc_result", None)
                 st.info("iPalsデータをアップロードすると余剰電力量が自動計算されます")
 
     # ----- FF (Fact Finding) -----
@@ -2691,6 +2959,16 @@ with tab2:
                 })
 
     # ----- Store all data in session state -----
+    # The manual (new-power) electricity path stores its inputs under
+    # manual_* widget keys; fall back to them so downstream savings
+    # calculations (pp7/pp8/ep4, annual_saving) receive real values.
+    if st.session_state.get("elec_company", "") == "その他（新電力・手入力）":
+        _contract_kw_cd = st.session_state.get("manual_contract_kw", 0)
+        _annual_kwh_cd = st.session_state.get("manual_annual_kwh", 0)
+    else:
+        _contract_kw_cd = st.session_state.get("contract_kw", 0)
+        _annual_kwh_cd = st.session_state.get("annual_kwh", 0)
+
     st.session_state["customer_data"] = {
         "proposal_type": "epc" if is_epc else "ppa",
         "company_name": company_name,
@@ -2714,7 +2992,12 @@ with tab2:
         "batteries": battery_data_list,
         "battery_total_kwh": total_battery_kwh,
         "battery_total_count": total_battery_count,
-        "battery_selling_price": st.session_state.get("_quote_battery_selling_price", 0),
+        # Prefer the on-screen widget value (may be manually edited); fall
+        # back to the quote-imported value when the widget is not rendered.
+        "battery_selling_price": st.session_state.get(
+            "battery_price_input",
+            st.session_state.get("_quote_battery_selling_price", 0),
+        ),
         # Pricing
         "kw_unit_cost": kw_unit_cost,
         "raw_cost": raw_cost,
@@ -2738,12 +3021,18 @@ with tab2:
         "lease_company": lease_company,
         "lease_rate": lease_rate,
         "lease_years": int(lease_years),
+        # CE (シーエナジー) target IRR (%) — used to goal-seek the lease rate
+        "ce_target_irr_pct": st.session_state.get("ce_target_irr_input"),
         # Current annual electricity cost (for PP7/PP8 savings calculation)
         "annual_cost": annual_elec_cost if annual_elec_cost > 0 else None,
         "elec_company": st.session_state.get("elec_company", ""),
         "elec_contract": st.session_state.get("elec_contract", ""),
-        "contract_kw": st.session_state.get("contract_kw", 0),
-        "annual_kwh": st.session_state.get("annual_kwh", 0),
+        "contract_kw": _contract_kw_cd,
+        "annual_kwh": _annual_kwh_cd,
+        # Basic charge unit price (yen/kW/month) for demand-cut slides
+        "basic_rate_kw": _basic_rate_for_cd,
+        # Persist the manual per-kWh rate so the manual path round-trips
+        "manual_unit_rate": st.session_state.get("manual_rate", 0.0),
         # PPA calc results (if auto-calculated)
         "annual_lease_payment": st.session_state.get("ppa_calc_result", {}).get("annual_lease_payment", 0),
         "ppa_effective_rate_pct": st.session_state.get("ppa_calc_result", {}).get("effective_rate_pct", 0.0),
@@ -2775,6 +3064,18 @@ with tab2:
         "estimate_electrical_cost": estimate_electrical_cost,
         "estimate_extra_items": _extra_items,
     }
+
+    # PP4 (current electricity analysis) KPIs — derive monthly usage / cost /
+    # unit price from the annual inputs; no other code sets these keys.
+    if _annual_kwh_cd and float(_annual_kwh_cd) > 0:
+        st.session_state["customer_data"]["monthly_kwh"] = float(_annual_kwh_cd) / 12
+    if annual_elec_cost > 0:
+        st.session_state["customer_data"]["monthly_cost"] = annual_elec_cost / 12
+        if _annual_kwh_cd and float(_annual_kwh_cd) > 0:
+            st.session_state["customer_data"]["current_unit_price"] = (
+                annual_elec_cost / float(_annual_kwh_cd)
+            )
+
     # Merge iPals data if available
     _ipals = st.session_state.get("ipals_data")
     if _ipals:
@@ -3203,7 +3504,7 @@ with tab4:
                 output_path = Path(tmp.name)
 
             try:
-                generate_proposal(
+                _res = generate_proposal(
                     slide_ids=selected_slides,
                     data=data,
                     output_path=output_path,
@@ -3217,7 +3518,18 @@ with tab4:
                     f"{_type_label}提案_{company}_{customer_data.get('proposal_date', '')}.pptx"
                 )
 
-                _gen_results.append(f"✅ 生成完了！（{len(selected_slides)} スライド / {filename}）")
+                # Surface generator warnings / skipped slides — otherwise a
+                # slide that failed inside generate_proposal would silently
+                # ship a PPTX with missing pages as "全枚数成功".
+                _slides_ok = _res.get("slides_generated", len(selected_slides))
+                _slides_skipped = _res.get("slides_skipped", [])
+                for _w in _res.get("warnings", []):
+                    _gen_results.append(f"⚠️ {_w}")
+                if _slides_skipped:
+                    _gen_results.append(
+                        "⚠️ 生成に失敗したスライド: " + ", ".join(_slides_skipped)
+                    )
+                _gen_results.append(f"✅ 生成完了！（{_slides_ok} スライド / {filename}）")
                 # Persist into session state so the download / Box upload
                 # buttons below survive reruns (a button click reruns the
                 # script with generate_btn=False)
@@ -3232,7 +3544,17 @@ with tab4:
                 output_path.unlink(missing_ok=True)
 
             st.write("3/3 完了")
-            _gen_status.update(state="complete", label=f"生成完了: {len(selected_slides)}枚")
+            if _slides_skipped:
+                _gen_status.update(
+                    label=(
+                        f"一部スライドの生成に失敗しました"
+                        f"（成功 {_slides_ok}枚 / 失敗 {len(_slides_skipped)}枚）"
+                    ),
+                    state="error",
+                )
+                st.error("生成に失敗したスライド: " + ", ".join(_slides_skipped))
+            else:
+                _gen_status.update(state="complete", label=f"生成完了: {_slides_ok}枚")
 
     # ----- Persistent output block (survives reruns; renders right after
     #       generation too, since it sits below the if-block) -----

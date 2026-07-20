@@ -641,6 +641,7 @@ def auto_calc_ppa(
     maintenance_yen_per_kw: float = DEFAULT_MAINTENANCE_YEN_PER_KW,
     insurance_yen_fixed: float = DEFAULT_INSURANCE_YEN_FIXED,
     finance_company: str | None = None,
+    ce_target_irr: float = CE_TARGET_IRR,
 ) -> dict:
     """Full PPA auto-calculation: financing payment -> O&M -> minimum PPA price -> cashflow table.
 
@@ -665,6 +666,7 @@ def auto_calc_ppa(
         maintenance_yen_per_kw:   Maintenance fee per kW (default 1,200 yen/kW/yr)
         insurance_yen_fixed:      Fixed annual insurance fee (default 120,000 yen/yr)
         finance_company:          Explicit finance company name (overrides lease_company if set)
+        ce_target_irr:            Target IRR for シーエナジー lease-rate goal-seek (default CE_TARGET_IRR)
 
     Returns dict with:
         principal, effective_rate_pct, annual_lease_payment, annual_om_cost,
@@ -689,9 +691,20 @@ def auto_calc_ppa(
     # For シーエナジー: auto-calculate lease rate from CE_TARGET_IRR
     ce_irr: float | None = None
     if company == "シーエナジー" and principal > 0 and selling_price > 0:
-        rate, ce_irr = _calc_ce_lease_rate(selling_price, principal, lease_years)
+        rate, ce_irr = _calc_ce_lease_rate(selling_price, principal, lease_years, target_irr=ce_target_irr)
         annual_payment = pmt(rate, lease_years, principal)
-        warnings_list.append(f"CE目標IRR {CE_TARGET_IRR*100:.2f}% → リース金利 {rate*100:.2f}% (実績IRR {ce_irr*100:.2f}%)")
+        warnings_list.append(f"CE目標IRR {ce_target_irr*100:.2f}% → リース金利 {rate*100:.2f}% (実績IRR {ce_irr*100:.2f}%)")
+        # Goal-seek can hit the search bounds (lease rate 1〜20%). Warn only when
+        # the rate actually sits at a bound AND the achieved IRR is off target:
+        # inside the bounds, small deviations come from the 100-yen PMT rounding
+        # in the CE sheet model, not from an unreachable target.
+        at_search_bound = rate <= 0.0101 or rate >= 0.1999
+        if abs(ce_irr - ce_target_irr) > 0.0005 and at_search_bound:
+            warnings_list.append(
+                f"⚠️ CE目標IRR {ce_target_irr*100:.2f}% は達成不能"
+                f"（実績 {ce_irr*100:.2f}%、リース金利が探索範囲 1〜20% の境界）。"
+                f"目標IRRを見直してください"
+            )
     else:
         annual_payment, rate = calc_lease_payment(principal, company, lease_rate_pct, lease_years)
 
@@ -711,6 +724,7 @@ def auto_calc_ppa(
     min_price = 0.0
     cashflow_table: list[dict] = []
     min_dscr: float | None = None
+    avg_dscr: float | None = None
 
     if principal > 0 and self_consumption_y1_kwh > 0:
         min_price = calc_min_ppa_price(
@@ -747,7 +761,13 @@ def auto_calc_ppa(
 
         dscr_values = [r["dscr"] for r in cashflow_table if r["dscr"] is not None]
         min_dscr = min(dscr_values) if dscr_values else None
-        avg_dscr = sum(dscr_values) / len(dscr_values) if dscr_values else None
+        # Average DSCR over the finance term only, matching the basis used by
+        # calc_min_ppa_price (post-lease / re-lease years would inflate it).
+        lease_dscr_values = [
+            r["dscr"] for r in cashflow_table
+            if r["dscr"] is not None and r["year"] <= lease_years
+        ]
+        avg_dscr = sum(lease_dscr_values) / len(lease_dscr_values) if lease_dscr_values else None
 
     # Calculate IRR and NPV from cashflow table
     ppa_irr: float | None = None
